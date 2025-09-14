@@ -800,177 +800,161 @@ public function showExportForm()
 
     public function exportExcel()
     {
+        // $export = new InventarisExport();
+        // $data = $export->collection(); // Ambil Collection dari InventarisExport
+
         // --- Data Contoh (sesuaikan dengan data asli dari database Anda) ---
         $data = collect([
-            (object)['nomor' => 2, 'nama_barang' => 'MP3 PLAYER', 'kode_barang' => '01-EL', 'spesifikasi' => 'MUROTAL', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.MASJID', 'nomor_ruang' => 4, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-04-29 00:00:00', 'foto_path' => null],
-            (object)['nomor' => 3, 'nama_barang' => 'FLASHDISK', 'kode_barang' => '01-EL', 'spesifikasi' => 'MUROTAL', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.MASJID', 'nomor_ruang' => 4, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-04-30 00:00:00', 'foto_path' => null],
-            (object)['nomor' => 4, 'nama_barang' => 'ALAT USG', 'kode_barang' => '05-AK', 'spesifikasi' => 'MYNDRAY', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.KIA', 'nomor_ruang' => 5, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-06-01 00:00:00', 'foto_path' => null],
+            (object)[
+                'nomor' => 2, 'nama_barang' => 'MP3 PLAYER', 'kode_barang' => '01-EL', 'spesifikasi' => 'MUROTAL', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.MASJID', 'nomor_ruang' => 4, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-04-29 00:00:00', 'foto_path' => null,
+            ],
+            (object)[
+                'nomor' => 3, 'nama_barang' => 'FLASHDISK', 'kode_barang' => '01-EL', 'spesifikasi' => 'MUROTAL', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.MASJID', 'nomor_ruang' => 4, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-04-30 00:00:00', 'foto_path' => null,
+            ],
+            (object)[
+                'nomor' => 4, 'nama_barang' => 'ALAT USG', 'kode_barang' => '05-AK', 'spesifikasi' => 'MYNDRAY', 'jenis_perawatan' => null, 'jumlah' => 1, 'jumlah_dipakai' => 1, 'jumlah_rusak' => null, 'tempat_pemakaian' => 'R.KIA', 'nomor_ruang' => 5, 'asal_perolehan' => 'KLINIK', 'tanggal_masuk' => '2024-06-01 00:00:00', 'foto_path' => null,
+            ],
             // ... (Tambahkan data lainnya sesuai contoh di gambar)
         ]);
+        // --- Akhir Data Contoh ---
 
-        $tempImagePath = null; // Inisialisasi variabel untuk path logo sementara
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
 
-        try {
-            $spreadsheet = new Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
+        // --- Header Utama --- //
+        // Menambahkan logo
+        $drawing = new Drawing();
+        $drawing->setName('Logo');
+        $drawing->setDescription('Logo');
+        // Ganti 'path/to/your/logo.png' dengan path logo Anda yang sebenarnya
+        $drawing->setPath(public_path('images/logo_unimus.png'));
+        $drawing->setCoordinates('A1');
+        $drawing->setHeight(60); // Sesuaikan tinggi gambar
+        $drawing->setWorksheet($sheet);
 
-            // --- GANTI BAGIAN INI --- //
-            // --- Header Utama (Kop Surat dengan Logo dari Supabase) --- //
+        // Judul
+        $sheet->mergeCells('B1:M2'); // Gabungkan sel untuk judul
+        $sheet->setCellValue('B1', 'KLINIK PRATAMA UNIMUS');
+        $sheet->getStyle('B1')->getFont()->setBold(true)->setSize(16);
+        $sheet->getStyle('B1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('B1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-            // 1. Ambil logo dari URL Supabase
-            // Pastikan Anda sudah mengatur SUPABASE_URL di file .env Anda
-            $supabaseUrl = rtrim(env('SUPABASE_URL'), '/');
-            $bucket = 'inventaris-fotos'; // Sesuaikan nama bucket jika berbeda
-            $logoPath = 'logo_klinik.png'; // Sesuaikan nama file logo
-            $logoUrl = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/{$logoPath}";
+        // Alamat
+        $sheet->mergeCells('B3:M3');
+        $sheet->setCellValue('B3', 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang');
+        $sheet->getStyle('B3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-            // Download logo ke file sementara yang aman
-            $tempImagePath = tempnam(sys_get_temp_dir(), 'logo') . '.png';
-            // Gunakan @ untuk menekan warning jika URL gagal diakses
-            $logoContent = @file_get_contents($logoUrl);
+        // Kontak
+        $sheet->mergeCells('B4:M4');
+        $sheet->setCellValue('B4', 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id');
+        $sheet->getStyle('B4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-            if ($logoContent !== false) {
-                file_put_contents($tempImagePath, $logoContent);
+        // Memberi jarak sebelum header tabel
+        $sheet->getRowDimension('5')->setRowHeight(10);
 
-                // 2. Sisipkan logo ke dalam sheet
+
+        // --- Header Tabel --- //
+        $sheet->mergeCells('A6:A7'); $sheet->setCellValue('A6', 'No.');
+        $sheet->mergeCells('B6:B7'); $sheet->setCellValue('B6', 'Foto');
+        $sheet->mergeCells('C6:C7'); $sheet->setCellValue('C6', 'Nomor Barang');
+        $sheet->mergeCells('D6:D7'); $sheet->setCellValue('D6', 'Nama Barang');
+        $sheet->mergeCells('E6:E7'); $sheet->setCellValue('E6', 'Kode Barang');
+        $sheet->mergeCells('F6:F7'); $sheet->setCellValue('F6', 'Spesifikasi');
+        $sheet->mergeCells('G6:G7'); $sheet->setCellValue('G6', 'Jenis Perawatan');
+        $sheet->mergeCells('H6:J6'); $sheet->setCellValue('H6', 'Jumlah');
+        $sheet->setCellValue('H7', 'Total');
+        $sheet->setCellValue('I7', 'Pakai');
+        $sheet->setCellValue('J7', 'Rusak');
+        $sheet->mergeCells('K6:L6'); $sheet->setCellValue('K6', 'Tempat');
+        $sheet->setCellValue('K7', 'Pemakaian');
+        $sheet->setCellValue('L7', 'Nomor Ruang');
+        $sheet->mergeCells('M6:M7'); $sheet->setCellValue('M6', 'Asal Perolehan');
+        $sheet->mergeCells('N6:N7'); $sheet->setCellValue('N6', 'Tanggal Masuk');
+
+        // Style header
+        $headerStyle = [
+            'font' => ['bold' => true],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ];
+        $sheet->getStyle('A6:N7')->applyFromArray($headerStyle);
+
+
+        // --- Isi Data --- //
+        $row = 8;
+        $no = 1;
+        foreach ($data as $item) {
+            // Nomor
+            $sheet->setCellValue('A' . $row, $no++);
+
+            // Foto
+            if (!empty($item->foto_path) && file_exists(public_path($item->foto_path))) {
                 $drawing = new Drawing();
-                $drawing->setName('Logo');
-                $drawing->setPath($tempImagePath); // Gunakan path file sementara
-                $drawing->setCoordinates('A1');
-                $drawing->setHeight(65);
-                $drawing->setOffsetX(10);
-                $drawing->setOffsetY(10);
+                $drawing->setPath(public_path($item->foto_path));
+                $drawing->setCoordinates('B' . $row);
+                $drawing->setHeight(80); // Atur tinggi gambar
+                $drawing->setOffsetX(5); // Atur posisi horizontal
+                $drawing->setOffsetY(5); // Atur posisi vertikal
                 $drawing->setWorksheet($sheet);
+                $sheet->getRowDimension($row)->setRowHeight(65); // Sesuaikan tinggi baris
+            } else {
+                $sheet->setCellValue('B' . $row, 'Tidak Ada Gambar');
             }
 
-            // 3. Tambahkan teks di sebelah kanan logo
-            // Nama Klinik
-            $sheet->mergeCells('C1:N1');
-            $sheet->setCellValue('C1', 'KLINIK PRATAMA UNIMUS');
-            $style = $sheet->getStyle('C1');
-            $style->getFont()->setBold(true)->setSize(16);
-            $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+            $sheet->setCellValue('C' . $row, $item->nomor ?? 'N/A');
+            $sheet->setCellValue('D' . $row, $item->nama_barang);
+            $sheet->setCellValue('E' . $row, $item->kode_barang ?? '-');
+            $sheet->setCellValue('F' . $row, $item->spesifikasi ?? '-');
+            $sheet->setCellValue('G' . $row, $item->jenis_perawatan ?? 'NULL');
+            $sheet->setCellValue('H' . $row, $item->jumlah);
+            $sheet->setCellValue('I' . $row, $item->jumlah_dipakai);
+            $sheet->setCellValue('J' . $row, $item->jumlah_rusak ?? '');
+            $sheet->setCellValue('K' . $row, $item->tempat_pemakaian);
+            $sheet->setCellValue('L' . $row, $item->nomor_ruang ?? '-');
+            $sheet->setCellValue('M' . $row, $item->asal_perolehan ?? '-');
+            $sheet->setCellValue('N' . $row, Carbon::parse($item->tanggal_masuk)->format('Y-m-d H:i:s'));
 
-            // Alamat Baris 1
-            $sheet->mergeCells('C2:N2');
-            $sheet->setCellValue('C2', 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang');
-            $sheet->getStyle('C2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            // Style untuk isi data
+            $sheet->getStyle("A{$row}:N{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->getStyle("A{$row}:N{$row}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+            $sheet->getStyle("A{$row}:N{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT); // Rata kiri untuk deskripsi
+            $sheet->getStyle("K{$row}:M{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT); // Rata kiri untuk deskripsi
 
-            // Alamat Baris 2 (Kontak)
-            $sheet->mergeCells('C3:N3');
-            $sheet->setCellValue('C3', 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id');
-            $sheet->getStyle('C3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-            // Atur tinggi baris header agar proporsional
-            $sheet->getRowDimension('1')->setRowHeight(25);
-            $sheet->getRowDimension('2')->setRowHeight(15);
-            $sheet->getRowDimension('3')->setRowHeight(15);
-            // --- AKHIR DARI BAGIAN YANG DIGANTI --- //
-
-
-            // Memberi jarak sebelum header tabel
-            $sheet->getRowDimension('5')->setRowHeight(10);
-
-            // --- Header Tabel --- //
-            $sheet->mergeCells('A6:A7'); $sheet->setCellValue('A6', 'No.');
-            // (Kode header tabel lainnya tetap sama)
-            $sheet->mergeCells('B6:B7'); $sheet->setCellValue('B6', 'Foto');
-            $sheet->mergeCells('C6:C7'); $sheet->setCellValue('C6', 'Nomor Barang');
-            $sheet->mergeCells('D6:D7'); $sheet->setCellValue('D6', 'Nama Barang');
-            $sheet->mergeCells('E6:E7'); $sheet->setCellValue('E6', 'Kode Barang');
-            $sheet->mergeCells('F6:F7'); $sheet->setCellValue('F6', 'Spesifikasi');
-            $sheet->mergeCells('G6:G7'); $sheet->setCellValue('G6', 'Jenis Perawatan');
-            $sheet->mergeCells('H6:J6'); $sheet->setCellValue('H6', 'Jumlah');
-            $sheet->setCellValue('H7', 'Total');
-            $sheet->setCellValue('I7', 'Pakai');
-            $sheet->setCellValue('J7', 'Rusak');
-            $sheet->mergeCells('K6:L6'); $sheet->setCellValue('K6', 'Tempat');
-            $sheet->setCellValue('K7', 'Pemakaian');
-            $sheet->setCellValue('L7', 'Nomor Ruang');
-            $sheet->mergeCells('M6:M7'); $sheet->setCellValue('M6', 'Asal Perolehan');
-            $sheet->mergeCells('N6:N7'); $sheet->setCellValue('N6', 'Tanggal Masuk');
-
-            // Style header
-            $headerStyle = [
-                'font' => ['bold' => true],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER,],
-                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
-            ];
-            $sheet->getStyle('A6:N7')->applyFromArray($headerStyle);
-
-            // --- Isi Data --- //
-            $row = 8;
-            $no = 1;
-            foreach ($data as $item) {
-                // (Kode pengisian data tetap sama)
-                $sheet->setCellValue('A' . $row, $no++);
-                if (!empty($item->foto_path) && file_exists(public_path($item->foto_path))) {
-                    $drawing = new Drawing();
-                    $drawing->setPath(public_path($item->foto_path));
-                    $drawing->setCoordinates('B' . $row);
-                    $drawing->setHeight(80);
-                    $drawing->setOffsetX(5);
-                    $drawing->setOffsetY(5);
-                    $drawing->setWorksheet($sheet);
-                    $sheet->getRowDimension($row)->setRowHeight(65);
-                } else {
-                    $sheet->setCellValue('B' . $row, 'Tidak Ada Gambar');
-                }
-                $sheet->setCellValue('C' . $row, $item->nomor ?? 'N/A');
-                $sheet->setCellValue('D' . $row, $item->nama_barang);
-                $sheet->setCellValue('E' . $row, $item->kode_barang ?? '-');
-                $sheet->setCellValue('F' . $row, $item->spesifikasi ?? '-');
-                $sheet->setCellValue('G' . $row, $item->jenis_perawatan ?? 'NULL');
-                $sheet->setCellValue('H' . $row, $item->jumlah);
-                $sheet->setCellValue('I' . $row, $item->jumlah_dipakai);
-                $sheet->setCellValue('J' . $row, $item->jumlah_rusak ?? '');
-                $sheet->setCellValue('K' . $row, $item->tempat_pemakaian);
-                $sheet->setCellValue('L' . $row, $item->nomor_ruang ?? '-');
-                $sheet->setCellValue('M' . $row, $item->asal_perolehan ?? '-');
-                $sheet->setCellValue('N' . $row, Carbon::parse($item->tanggal_masuk)->format('Y-m-d H:i:s'));
-
-                $sheet->getStyle("A{$row}:N{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-                $sheet->getStyle("A{$row}:N{$row}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle("D{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-                $sheet->getStyle("K{$row}:M{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-
-                $row++;
-            }
-
-            // --- Atur Lebar Kolom --- //
-            // (Kode lebar kolom tetap sama)
-            $sheet->getColumnDimension('A')->setWidth(5);
-            $sheet->getColumnDimension('B')->setWidth(15);
-            $sheet->getColumnDimension('C')->setWidth(15);
-            $sheet->getColumnDimension('D')->setWidth(25);
-            $sheet->getColumnDimension('E')->setWidth(15);
-            $sheet->getColumnDimension('F')->setWidth(25);
-            $sheet->getColumnDimension('G')->setWidth(15);
-            $sheet->getColumnDimension('H')->setWidth(8);
-            $sheet->getColumnDimension('I')->setWidth(8);
-            $sheet->getColumnDimension('J')->setWidth(8);
-            $sheet->getColumnDimension('K')->setWidth(20);
-            $sheet->getColumnDimension('L')->setWidth(15);
-            $sheet->getColumnDimension('M')->setWidth(30);
-            $sheet->getColumnDimension('N')->setWidth(20);
-
-            // --- Stream ke browser --- //
-            $writer = new Xlsx($spreadsheet);
-            $fileName = 'laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
-
-            return new StreamedResponse(function () use ($writer) {
-                $writer->save('php://output');
-            }, 200, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-            ]);
-
-        } finally {
-            // Selalu hapus file gambar sementara setelah selesai
-            if ($tempImagePath && file_exists($tempImagePath)) {
-                unlink($tempImagePath);
-            }
+            $row++;
         }
+
+
+        // --- Atur Lebar Kolom --- //
+        $sheet->getColumnDimension('A')->setWidth(5);
+        $sheet->getColumnDimension('B')->setWidth(15);
+        $sheet->getColumnDimension('C')->setWidth(15);
+        $sheet->getColumnDimension('D')->setWidth(25);
+        $sheet->getColumnDimension('E')->setWidth(15);
+        $sheet->getColumnDimension('F')->setWidth(25);
+        $sheet->getColumnDimension('G')->setWidth(15);
+        $sheet->getColumnDimension('H')->setWidth(8);
+        $sheet->getColumnDimension('I')->setWidth(8);
+        $sheet->getColumnDimension('J')->setWidth(8);
+        $sheet->getColumnDimension('K')->setWidth(20);
+        $sheet->getColumnDimension('L')->setWidth(15);
+        $sheet->getColumnDimension('M')->setWidth(30);
+        $sheet->getColumnDimension('N')->setWidth(20);
+
+
+        // --- Stream ke browser --- //
+        $writer = new Xlsx($spreadsheet);
+        $fileName = 'laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ]);
     }
 
     

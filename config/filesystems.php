@@ -68,6 +68,8 @@ return [
             'url' => env('SUPABASE_URL') . '/storage/v1/object/public',
             'endpoint' => env('SUPABASE_URL') . '/storage/v1/s3',
             'use_path_style_endpoint' => true,
+                'throw' => true, // biar error otomatis dilempar
+
         ],
 
 

@@ -10,7 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 
@@ -30,7 +30,7 @@ class GenerateInventarisPdf implements ShouldQueue
         $report = Report::find($this->reportId);
 
         if (! $report) {
-            Log::error("Job Gagal: Report ID {$this->reportId} tidak ditemukan.");
+            Log::error("Job gagal: Report ID {$this->reportId} tidak ditemukan.");
             return;
         }
 
@@ -56,33 +56,17 @@ class GenerateInventarisPdf implements ShouldQueue
                 'date'       => Carbon::now()->format('d F Y'),
             ];
 
-            // Generate PDF
             $pdf = Pdf::loadView('inventaris.pdf', $data)
-                      ->setPaper('a4', 'landscape')
-                      ->setOption('isRemoteEnabled', true);
+                ->setPaper('a4', 'landscape')
+                ->setOption('isRemoteEnabled', true);
 
             $pdfContent = $pdf->output();
 
-            // ======================== Upload via HTTP ke Supabase ========================
-            $supabaseUrl = env('SUPABASE_URL'); // misal https://<project-id>.supabase.co
-            $supabaseKey = env('SUPABASE_KEY');
-            $bucket      = env('SUPABASE_BUCKET', 'inventaris-fotos');
-            $fileName    = $report->file_name; // misal: report_123.pdf
+            // Upload ke Supabase
+            Storage::disk('supabase')->put($report->file_name, $pdfContent, 'public');
 
-            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucket}/{$fileName}";
-
-            $response = Http::withHeaders([
-                'apikey'        => $supabaseKey,
-                'Authorization' => 'Bearer ' . $supabaseKey,
-                'Content-Type'  => 'application/pdf',
-                'x-upsert'      => 'true', // menimpa file jika sudah ada
-            ])->post($uploadUrl, $pdfContent);
-
-            if (!in_array($response->status(), [200, 201])) {
-                throw new \Exception("Upload Supabase gagal: HTTP {$response->status()} - {$response->body()}");
-            }
-
-            $filePath = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/{$fileName}";
+            // Ambil URL publik langsung dari Storage
+            $filePath = Storage::disk('supabase')->url($report->file_name);
 
             $report->update([
                 'status'    => 'completed',
