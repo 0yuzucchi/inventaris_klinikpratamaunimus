@@ -26,15 +26,7 @@
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "cookie"
 
-    },
-        "crons": [
-    {
-      "path": "/api/queue-worker",
-      "schedule": "* * * * *", 
-      "headers": {
-         "Authorization": "Bearer cobaajadulu"
-      }
     }
-  ]
+        
 
 }
