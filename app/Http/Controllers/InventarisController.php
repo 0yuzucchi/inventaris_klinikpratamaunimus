@@ -736,15 +736,35 @@ return $pdf->download($fileName);
     // }
     public function exportExcel()
 {
-    $export = new InventarisExport();
-    $fileName = 'inventaris_' . time() . '.xlsx';
+    $fileName = 'inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
 
-    // generate langsung ke memory
-    $content = Excel::raw($export, ExcelFormat::XLSX);
+    // 🔹 Generate Excel ke binary string
+    $excelContent = Excel::raw(new InventarisExport, \Maatwebsite\Excel\Excel::XLSX);
 
-    return response($content, 200, [
-        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition' => "attachment; filename=\"$fileName\"",
+    // 🔹 Upload ke Supabase bucket "exports"
+    $response = Http::withHeaders([
+        'apikey'        => env('SUPABASE_KEY'),
+        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+        'Content-Type'  => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ])->withBody(
+        $excelContent,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+    if ($response->failed()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal upload file ke Supabase',
+            'error'   => $response->body(),
+        ], 500);
+    }
+
+    // 🔹 Link public
+    $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
+
+    return response()->json([
+        'success' => true,
+        'url'     => $publicUrl,
     ]);
 }
 
