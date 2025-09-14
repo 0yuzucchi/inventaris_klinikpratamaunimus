@@ -736,7 +736,7 @@ public function exportExcel()
 
     // 🔹 Kalau file < 4 MB → upload ke Supabase
     if ($fileSize < 4 * 1024 * 1024) {
-        $fileName = 'excel-laporan' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+        $fileName = 'excel-laporan-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
 
         $response = Http::withHeaders([
             'apikey'        => env('SUPABASE_KEY'),
