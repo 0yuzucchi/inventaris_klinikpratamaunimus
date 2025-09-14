@@ -711,7 +711,7 @@ class InventarisController extends Controller
 $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
 
 // 🔹 Redirect langsung ke PDF
-return redirect()->away($downloadUrl);
+return $pdf->download($fileName);
 }
 
 
