@@ -26,5 +26,12 @@
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "cookie"
 
-    }
+    },
+        "crons": [
+        {
+            "path": "/api/queue-work",
+            "schedule": "* * * * *"
+        }
+    ]
+
 }

@@ -5,6 +5,15 @@ use App\Http\Controllers\InventarisController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PanduanController;
+use Illuminate\Support\Facades\Artisan;
+
+Route::post('/queue-work', function () {
+    // `--stop-when-empty` penting agar proses berhenti setelah semua job selesai
+    // Ini mencegah timeout di lingkungan serverless.
+    Artisan::call('queue:work --stop-when-empty');
+    return response()->json(['status' => 'jobs processed']);
+});
+
 
 Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
     // Route default akan redirect ke panduan 'tambah'
