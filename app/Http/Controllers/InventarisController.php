@@ -683,38 +683,37 @@ class InventarisController extends Controller
         'date'       => date('d F Y')
     ];
 
-    // 🔹 Generate PDF (langsung di memory)
+    // 🔹 Generate PDF di memory
     $pdf = Pdf::loadView('inventaris.pdf', $data)->setPaper('a4', 'landscape');
     $pdf->setOption('isRemoteEnabled', true);
+    $pdfContent = $pdf->output();
 
     // 🔹 Nama file unik
     $fileName = 'laporan-inventaris-' .
         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
         '-' . date('Ymd') . '-' . Str::random(6) . '.pdf';
 
-    // 🔹 Upload ke Supabase Storage langsung dari memory
+    // 🔹 Upload ke Supabase (bucket: exports)
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-        'Content-Type'  => 'application/pdf',
-    ])->put(
-        env('SUPABASE_URL') . '/storage/v1/object/laporan/' . $fileName, // bucket = laporan
-        $pdf->output()
-    );
+    ])->attach(
+        'file',
+        $pdfContent,
+        $fileName
+    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
 
     if ($response->failed()) {
-        return response()->json(['error' => 'Gagal upload file ke Supabase', 'detail' => $response->body()], 500);
-    }
-
-    // 🔹 Public URL (kalau bucket public)
-    $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/laporan/' . $fileName;
-
-    return response()->json([
-    'message' => 'Laporan berhasil dibuat',
-    'download_url' => $downloadUrl,
-], 200, [], JSON_UNESCAPED_UNICODE);
-
+    return response()->json(['error' => 'Gagal upload file ke Supabase', 'detail' => $response->body()], 500);
 }
+
+// 🔹 Public URL (kalau bucket public)
+$downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
+
+// 🔹 Redirect langsung ke PDF
+return redirect()->away($downloadUrl);
+}
+
 
 
 
@@ -737,7 +736,16 @@ class InventarisController extends Controller
     // }
     public function exportExcel()
 {
-    return Excel::download(new InventarisExport, 'inventaris.xlsx');
+    $export = new InventarisExport();
+    $fileName = 'inventaris_' . time() . '.xlsx';
+
+    // generate langsung ke memory
+    $content = Excel::raw($export, ExcelFormat::XLSX);
+
+    return response($content, 200, [
+        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition' => "attachment; filename=\"$fileName\"",
+    ]);
 }
 
     public function print()
