@@ -4,126 +4,111 @@ namespace App\Jobs;
 
 use App\Models\Inventaris;
 use App\Models\Report;
-use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http; // <--- PENTING: Tambahkan use statement ini
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class GenerateInventarisPdf implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $report;
+    protected $reportId;
 
-    /**
-     * Create a new job instance.
-     *
-     * @return void
-     */
-    public function __construct(Report $report)
+    public function __construct($reportId)
     {
-        $this->report = $report;
+        $this->reportId = $reportId;
     }
 
-    /**
-     * Execute the job.
-     *
-     * @return void
-     */
     public function handle()
     {
-        // Log saat job dimulai
-        Log::info('[Report ID: ' . $this->report->id . '] Job Dimulai.');
+        $report = Report::find($this->reportId);
+
+        if (! $report) {
+            Log::error("Job Gagal: Report ID {$this->reportId} tidak ditemukan.");
+            return;
+        }
+
+        $report->update(['status' => 'processing']);
 
         try {
-            // 1. Update status laporan menjadi 'processing'
-            $this->report->update(['status' => 'processing']);
-            Log::info('[Report ID: ' . $this->report->id . '] Status diubah menjadi -> processing.');
-
-            // 2. Logika query
-            $filters = json_decode($this->report->filters, true);
-            Log::info('[Report ID: ' . $this->report->id . '] Filter yang diterima: ', $filters);
-
+            $filters = json_decode($report->filters, true) ?? [];
             $query = Inventaris::query();
 
-            // --- SALIN SEMUA LOGIKA FILTER ANDA DARI CONTROLLER KE SINI ---
+            // Logika filter Anda yang sudah aman
             if (!empty($filters['tanggal_mulai']) && !empty($filters['tanggal_selesai'])) {
-                 $query->whereBetween('tanggal_masuk', [$filters['tanggal_mulai'], $filters['tanggal_selesai']]);
+                $query->whereBetween('tanggal_masuk', [$filters['tanggal_mulai'], $filters['tanggal_selesai']]);
             } else {
-                if (!empty($filters['hari'])) {
-                    $query->whereDay('tanggal_masuk', $filters['hari']);
-                }
-                if (!empty($filters['bulan'])) {
-                    $query->whereMonth('tanggal_masuk', $filters['bulan']);
-                }
-                if (!empty($filters['tahun'])) {
-                    $query->whereYear('tanggal_masuk', $filters['tahun']);
-                }
+                if (!empty($filters['hari']))  $query->whereDay('tanggal_masuk', (int) $filters['hari']);
+                if (!empty($filters['bulan'])) $query->whereMonth('tanggal_masuk', (int) $filters['bulan']);
+                if (!empty($filters['tahun'])) $query->whereYear('tanggal_masuk', (int) $filters['tahun']);
             }
-            // --- AKHIR DARI LOGIKA FILTER ---
 
             $inventaris = $query->latest('tanggal_masuk')->get();
-            Log::info('[Report ID: ' . $this->report->id . '] Query ke database selesai. Ditemukan ' . $inventaris->count() . ' baris data.');
-
             $data = [
                 'inventaris' => $inventaris,
-                'title'      => $this->report->title,
-                'date'       => date('d F Y')
+                'title'      => $report->title,
+                'date'       => Carbon::now()->format('d F Y'),
             ];
 
-            // 3. Generate PDF
-            Log::info('[Report ID: ' . $this->report->id . '] Memulai proses pembuatan PDF...');
-            $pdf = Pdf::loadView('inventaris.pdf', $data);
-            $pdf->setOption('isRemoteEnabled', true);
-            $pdf->setPaper('a4', 'landscape');
+            // Generate PDF
+            $pdf = Pdf::loadView('inventaris.pdf', $data)
+                ->setPaper('a4', 'landscape')
+                ->setOption('isRemoteEnabled', true);
             $pdfContent = $pdf->output();
-            Log::info('[Report ID: ' . $this->report->id . '] PDF berhasil dibuat. Ukuran file: ' . round(strlen($pdfContent) / 1024, 2) . ' KB.');
 
-            // 4. Upload ke Supabase Storage
-            $fileName = $this->report->file_name;
+            // ======================= MENGGUNAKAN HTTP CLIENT MANUAL (SESUAI PERMINTAAN) =======================
 
-            // =================== KODE TES KONEKSI SEMENTARA ===================
-            // Baris ini akan mencoba mengunggah file teks sederhana untuk memastikan
-            // koneksi, izin, dan konfigurasi Supabase sudah benar.
-            try {
-                Storage::disk('supabase')->put('uji-koneksi.txt', 'Tes koneksi Supabase berhasil pada ' . now());
-                Log::info('[Report ID: ' . $this->report->id . '] TES KONEKSI BERHASIL: File uji-koneksi.txt berhasil diunggah.');
-            } catch (\Exception $e) {
-                // Jika tes ini saja sudah gagal, kita tidak perlu melanjutkan.
-                Log::error('[Report ID: ' . $this->report->id . '] TES KONEKSI GAGAL: Tidak bisa mengunggah file teks sederhana. Periksa RLS/Policies, .env, dan config/filesystems.php. Error: ' . $e->getMessage());
-                throw $e; // Lempar ulang error agar job ini dianggap gagal total.
+            // 1. Siapkan semua variabel yang dibutuhkan dari .env dan model
+            $fileName   = $report->file_name;
+            $bucketName = env('SUPABASE_BUCKET');
+            $supabaseKey = env('SUPABASE_KEY');
+            $supabaseUrl = env('SUPABASE_URL');
+            
+            // 2. Bangun URL untuk endpoint upload Supabase Storage API
+            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucketName}/{$fileName}";
+            
+            // 3. Lakukan panggilan HTTP POST dengan header yang benar
+            $response = Http::withHeaders([
+                'apikey'        => $supabaseKey,
+                'Authorization' => 'Bearer ' . $supabaseKey,
+                'Content-Type'  => 'application/pdf', // Header ini wajib untuk file biner
+                'x-upsert'      => 'true', // Opsi untuk menimpa file jika sudah ada
+            ])->post($uploadUrl, $pdfContent);
+            
+            // 4. Periksa responsnya secara eksplisit
+            if ($response->failed()) {
+                // Jika gagal, lemparkan error dengan pesan dari Supabase agar sangat jelas
+                throw new \Exception('GAGAL UNGGAH VIA HTTP: Status Code ' . $response->status() . ' - Pesan: ' . $response->body());
             }
-            // =================== AKHIR KODE TES KONEKSI ===================
 
-            Log::info('[Report ID: ' . $this->report->id . '] Mencoba mengunggah file PDF dengan nama: ' . $fileName);
-            Storage::disk('supabase')->put($fileName, $pdfContent);
-            Log::info('[Report ID: ' . $this->report->id . '] Unggah PDF BERHASIL.');
+            // 5. Jika berhasil, bangun URL publik secara manual
+            $filePath = "{$supabaseUrl}/storage/v1/object/public/{$bucketName}/{$fileName}";
+            
+            // =================================== AKHIR DARI BLOK HTTP ===================================
 
-            Log::info('[Report ID: ' . $this->report->id . '] Mengambil URL publik dari Supabase...');
-            $filePath = Storage::disk('supabase')->url($fileName);
-            Log::info('[Report ID: ' . $this->report->id . '] URL publik yang didapat: ' . $filePath);
-
-            // 5. Update record laporan di database
-            $this->report->update([
+            // Perbarui status laporan di database menjadi selesai
+            $report->update([
                 'status'    => 'completed',
                 'file_path' => $filePath,
             ]);
-            Log::info('[Report ID: ' . $this->report->id . '] Status diubah menjadi -> completed. Job Selesai dengan SUKSES.');
 
         } catch (\Exception $e) {
-            // Jika terjadi error di mana pun dalam blok 'try', proses akan lompat ke sini
-            Log::error('[Report ID: ' . $this->report->id . '] TERJADI ERROR PADA JOB. Pesan: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Baris: ' . $e->getLine());
+            // Catat error yang terjadi, termasuk error dari HTTP
+            Log::error("Gagal generate PDF untuk Report ID {$this->reportId}: " . $e->getMessage());
 
-            // Update status di database menjadi 'failed' agar pengguna tahu ada masalah
-            $this->report->update([
-                'status' => 'failed',
-                'error_message' => substr($e->getMessage(), 0, 500) // Ambil 500 karakter pertama dari pesan error
+            $report->update([
+                'status'        => 'failed',
+                'error_message' => $e->getMessage(),
             ]);
+
+            // Lemparkan kembali error agar terminal queue worker menampilkan status "FAILED"
+            throw $e;
         }
     }
 }

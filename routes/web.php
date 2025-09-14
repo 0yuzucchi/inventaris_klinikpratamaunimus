@@ -8,12 +8,22 @@ use App\Http\Controllers\PanduanController;
 use App\Http\Controllers\ReportController;
 
 // Route untuk menampilkan halaman form filter
-Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
+// 1. Tampilkan form export (opsional)
+Route::get('/inventaris/keren', [InventarisController::class, 'showExportForm'])
+    ->name('inventaris.export.form');
 
-// Route yang akan menangani submit form (yang sudah Anda buat)
-Route::post('/inventaris/export-request', [InventarisController::class, 'requestPdfExport'])->name('inventaris.export.request');
+// 2. Submit form untuk membuat laporan via job queue
+Route::post('/inventaris/keren', [ReportController::class, 'requestPdfExport'])
+    ->name('inventaris.export.request'); // nama route bisa disesuaikan
 
-Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/request-pdf', [ReportController::class, 'requestPdfExport'])
+    ->name('reports.requestPdfExport');
+
+// 3. Halaman daftar laporan
+Route::prefix('reports')->group(function () {
+    Route::get('/', [ReportController::class, 'index'])->name('reports.index');
+});
+
 
 Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
     // Route default akan redirect ke panduan 'tambah'

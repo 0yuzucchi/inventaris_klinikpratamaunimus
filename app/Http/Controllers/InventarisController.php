@@ -22,7 +22,10 @@ use Exception;
 use Illuminate\Support\Facades\Http;
 use App\Jobs\GenerateInventarisPdf;
 use App\Models\Report;
-
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class InventarisController extends Controller
 {
@@ -636,42 +639,67 @@ class InventarisController extends Controller
     //         ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
     // }
 
-    public function requestPdfExport(Request $request)
-{
-    // 1. Validasi input (tetap sama)
-    $request->validate([
-        'tahun'    => 'nullable|date_format:Y',
-        // ... validasi lainnya
-    ]);
+        public function requestPdfExport(Request $request)
+    {
+        // 1. Validasi input
+        $request->validate([
+            'tahun'           => 'nullable|date_format:Y',
+            'bulan'           => 'nullable|date_format:m',
+            'hari'            => 'nullable|date_format:d',
+            'tanggal_mulai'   => 'nullable|date',
+            'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+        ]);
 
-    // 2. Membuat judul dan nama file (tetap sama)
-    $titleParts = [];
-    // ... (salin logika pembuatan titleParts dari controller lama)
-    
-    $title = empty($titleParts)
-        ? 'Laporan Keseluruhan Inventaris'
-        : 'Laporan Inventaris ' . implode(', ', $titleParts);
-    
-    $fileName = 'exports/laporan-inventaris-' . // Simpan dalam folder 'reports'
-        str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
-        '-' . now()->timestamp . '.pdf'; // Gunakan timestamp agar unik
+        // 2. Bangun titleParts sesuai filter
+        $titleParts = [];
 
-    // 3. Buat record laporan di database
-    $report = Report::create([
-        // 'user_id' => auth()->id(), // jika ada user
-        'title'     => $title,
-        'file_name' => $fileName,
-        'filters'   => json_encode($request->all()), // Simpan semua filter
-        'status'    => 'pending',
-    ]);
+        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+            $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
+            $endDate   = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+            $titleParts[] = "dari {$startDate} sampai {$endDate}";
+        } else {
+            $hari  = $request->filled('hari')  ? (int) $request->input('hari')  : null;
+            $bulan = $request->filled('bulan') ? (int) $request->input('bulan') : null;
+            $tahun = $request->filled('tahun') ? (int) $request->input('tahun') : null;
 
-    // 4. Dispatch job ke antrian
-    GenerateInventarisPdf::dispatch($report);
+            if ($hari) {
+                $titleParts[] = 'Tanggal ' . $hari;
+            }
+            if ($bulan) {
+                $titleParts[] = 'Bulan ' . Carbon::create()->month($bulan)->format('F');
+            }
+            if ($tahun) {
+                $titleParts[] = 'Tahun ' . $tahun;
+            }
+        }
 
-    // 5. Redirect ke halaman daftar laporan dengan pesan sukses
-    return redirect()->route('reports.index')
-        ->with('success', 'Permintaan laporan Anda sedang diproses dan akan segera tersedia di halaman ini.');
-}
+        $title = empty($titleParts)
+            ? 'Laporan Keseluruhan Inventaris'
+            : 'Laporan Inventaris ' . implode(', ', $titleParts);
+
+        // 3. Generate nama file unik
+        $fileName = 'exports/laporan-inventaris-' .
+            str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+            '-' . now()->timestamp . '-' . uniqid() . '.pdf';
+
+        // 4. Buat record laporan
+        $report = Report::create([
+            // 'user_id' => auth()->id(), // aktifkan kalau ada relasi user
+            'title'     => $title,
+            'file_name' => $fileName,
+            'filters'   => json_encode($request->all()),
+            'status'    => 'pending',
+        ]);
+
+        // 5. Dispatch job dengan ID
+        GenerateInventarisPdf::dispatch($report->id);
+
+        // 6. Redirect ke halaman daftar laporan
+        return redirect()->route('reports.index')
+            ->with('success', 'Permintaan laporan Anda sedang diproses dan akan segera tersedia.');
+    }
+
+
 
 public function showExportForm()
 {
@@ -769,50 +797,81 @@ public function showExportForm()
     //     ]);
     // }
 
-public function exportExcel(Request $request)
-{
-    $export = new InventarisExport();
+    public function exportExcel()
+    {
+        $export = new InventarisExport();
+        $data = $export->collection(); // Ambil Collection dari InventarisExport
 
-    // Ambil raw Excel binary
-    $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
-    $sizeInBytes = strlen($content);
-    $fileName = 'excel-laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
 
-    // Opsi: paksa download langsung lewat query ?download=1
-    $forceDownload = $request->boolean('download', false);
+        // --- Header --- //
+        $headers = [
+            'No.', 'Foto', 'Nomor Barang', 'Nama Barang (Kode)', 'Spesifikasi',
+            'Jenis Perawatan', 'Jumlah (Total/Pakai/Rusak)', 'Tempat (Ruang)', 'Asal & Tgl Masuk'
+        ];
 
-    // 🔹 Jika file < 4MB dan tidak dipaksa download → upload ke Supabase
-    if ($sizeInBytes < 4 * 1024 * 1024 && !$forceDownload) {
-        $response = Http::withHeaders([
-            'apikey'        => env('SUPABASE_KEY'),
-            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-            'Content-Type'  => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ])->withBody($content, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-          ->put(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
-
-        if ($response->failed()) {
-            return response()->json([
-                'error'  => 'Gagal upload file ke Supabase',
-                'detail' => $response->body()
-            ], 500);
+        foreach ($headers as $col => $header) {
+            $sheet->setCellValueByColumnAndRow($col + 1, 1, $header);
         }
 
-        return response()->json([
-            'message'  => 'File berhasil diupload ke Supabase',
-            'fileName' => $fileName,
-            'url'      => rtrim(env('SUPABASE_PUBLIC_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName,
-            'sizeMB'   => round($sizeInBytes / (1024 * 1024), 2),
+        // Style header
+        $sheet->getStyle('A1:I1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:I1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A1:I1')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        // --- Isi Data --- //
+        $row = 2;
+        $no = 1;
+        foreach ($data as $item) {
+            $sheet->setCellValue('A'.$row, $no++);
+            $sheet->setCellValue('B'.$row, $item->foto_url ?? 'Tidak Ada Gambar');
+            $sheet->setCellValue('C'.$row, $item->nomor ?? 'N/A');
+            $sheet->setCellValue('D'.$row, $item->nama_barang . ' (' . ($item->kode_barang ?? '-') . ')');
+            $sheet->setCellValue('E'.$row, $item->spesifikasi ?? '-');
+            $sheet->setCellValue('F'.$row, $item->jenis_perawatan ?? '-');
+            $sheet->setCellValue('G'.$row, "Total: {$item->jumlah}\nDipakai: {$item->jumlah_dipakai}\nRusak: {$item->jumlah_rusak}");
+            $sheet->setCellValue('H'.$row, $item->tempat_pemakaian . ' (Ruang: ' . ($item->nomor_ruang ?? '-') . ')');
+            $sheet->setCellValue('I'.$row, $item->asal_perolehan . ' / ' . \Carbon\Carbon::parse($item->tanggal_masuk)->format('d-m-Y'));
+
+            // Wrap text dan border
+            $sheet->getStyle("A{$row}:I{$row}")
+                ->getAlignment()
+                ->setWrapText(true)
+                ->setVertical(Alignment::VERTICAL_TOP);
+            $sheet->getStyle("A{$row}:I{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+            $row++;
+        }
+
+        // --- Footer / Total --- //
+        $sheet->setCellValue('F'.$row, 'TOTAL KESELURUHAN');
+        $sheet->setCellValue('G'.$row, $data->sum('jumlah'));
+        $sheet->getStyle("F{$row}:G{$row}")->getFont()->setBold(true);
+        $sheet->getStyle("F{$row}:G{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Set column width agar lebih rapi
+        $sheet->getColumnDimension('A')->setWidth(5);
+        $sheet->getColumnDimension('B')->setWidth(20);
+        $sheet->getColumnDimension('C')->setWidth(15);
+        $sheet->getColumnDimension('D')->setWidth(25);
+        $sheet->getColumnDimension('E')->setWidth(20);
+        $sheet->getColumnDimension('F')->setWidth(15);
+        $sheet->getColumnDimension('G')->setWidth(20);
+        $sheet->getColumnDimension('H')->setWidth(20);
+        $sheet->getColumnDimension('I')->setWidth(20);
+
+        // --- Stream ke browser --- //
+        $writer = new Xlsx($spreadsheet);
+        $fileName = 'laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+
+        return new StreamedResponse(function() use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ]);
     }
-
-    // 🔹 File ≥ 4MB atau dipaksa download → langsung stream ke browser
-    return new StreamedResponse(function () use ($content) {
-        echo $content;
-    }, 200, [
-        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-    ]);
-}
 
     
     public function print()
