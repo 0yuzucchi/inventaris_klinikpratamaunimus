@@ -9,6 +9,7 @@ use App\Http\Controllers\ReportController;
 
 // Route untuk menampilkan halaman form filter
 // 1. Tampilkan form export (opsional)
+
 Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
 
 
