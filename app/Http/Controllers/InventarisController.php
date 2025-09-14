@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
@@ -681,33 +682,32 @@ class InventarisController extends Controller
         'date'       => date('d F Y')
     ];
 
-    // 🔹 Generate PDF di memory
-    $pdf = Pdf::loadView('inventaris.pdf', $data)
-        ->setPaper('a4', 'landscape');
+    // 🔹 Generate PDF langsung ke memory (string binary)
+    $pdfBinary = Pdf::loadView('inventaris.pdf', $data)
+        ->setPaper('a4', 'landscape')
+        ->setOption('isRemoteEnabled', true)
+        ->output();
 
-    $pdf->setOption('isRemoteEnabled', true);
-
-    // 🔹 Simpan file sementara di /tmp (serverless-friendly)
+    // 🔹 Nama file unik
     $fileName = 'laporan-inventaris-' .
         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
         '-' . date('Ymd') . '-' . Str::random(6) . '.pdf';
 
-    $filePath = '/tmp/' . $fileName;
-    file_put_contents($filePath, $pdf->output());
-
-    // 🔹 Upload ke Supabase Storage
+    // 🔹 Upload langsung ke Supabase Storage
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
     ])->attach(
-        'file', file_get_contents($filePath), $fileName
+        'file',
+        $pdfBinary,  // langsung binary, tanpa file_put_contents
+        $fileName
     )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
 
     if ($response->failed()) {
         return back()->with('error', 'Gagal upload file ke Supabase: ' . $response->body());
     }
 
-    // 🔹 Dapatkan public URL (atau signed URL)
+    // 🔹 Public URL Supabase (pastikan bucket "exports" public)
     $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
 
     // 🔹 Redirect user ke link download
@@ -728,44 +728,38 @@ class InventarisController extends Controller
     //         'Content-Disposition' => 'attachment; filename="inventaris.xlsx"',
     //     ]);
     // }
-    public function exportCsv()
+    public function exportExcel(Request $request)
 {
-    $inventaris = Inventaris::all();
+    $export = new InventarisExport();
+    $fileName = 'inventaris_' . time() . '.xlsx';
 
-    $fileName = 'inventaris_' . time() . '.csv';
-    $handle = fopen('php://temp', 'r+');
+    // === generate excel binary
+    $content = Excel::raw($export, ExcelFormat::XLSX);
 
-    // header
-    fputcsv($handle, ['ID', 'Nama Barang', 'Jumlah']);
-
-    // isi
-    foreach ($inventaris as $item) {
-        fputcsv($handle, [$item->id, $item->nama_barang, $item->jumlah]);
-    }
-
-    rewind($handle);
-    $content = stream_get_contents($handle);
-    fclose($handle);
-
-    // upload ke Supabase
+    // === upload ke Supabase
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
     ])->attach(
         'file',
-        $content,
+        $content,   // langsung binary string
         $fileName
     )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
 
     if ($response->failed()) {
-        return response()->json(['error' => $response->body()], 500);
+        return response()->json([
+            'success' => false,
+            'message' => 'Upload ke Supabase gagal',
+            'error'   => $response->body(),
+        ], 500);
     }
 
+    // === buat link publik
     $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
 
+    // langsung redirect ke file asli (tetap format XLSX)
     return redirect()->away($publicUrl);
 }
-
 
     public function print()
     {
