@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Http;
+use App\Jobs\ExportInventarisJob;
 
 class InventarisController extends Controller
 {
@@ -633,86 +634,17 @@ class InventarisController extends Controller
     //         ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
     // }
 
-    public function exportPDF(Request $request)
+
+public function exportPDF(Request $request)
 {
-    $request->validate([
-        'tahun'    => 'nullable|date_format:Y',
-        'bulan'    => 'nullable|date_format:m',
-        'hari'     => 'nullable|date_format:d',
-        'tanggal_mulai'  => 'nullable|date',
-        'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
-    ]);
+    $filters = $request->only(['tahun','bulan','hari','tanggal_mulai','tanggal_selesai']);
 
-    $query = Inventaris::query();
-    $titleParts = [];
+    // Dispatch job ke queue
+ExportInventarisJob::dispatch($filters);
 
-    if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
-        $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
-        $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
-
-        $query->whereBetween('tanggal_masuk', [
-            $request->input('tanggal_mulai'),
-            $request->input('tanggal_selesai')
-        ]);
-        $titleParts[] = "dari {$startDate} sampai {$endDate}";
-    } else {
-        if ($request->filled('hari')) {
-            $query->whereDay('tanggal_masuk', $request->input('hari'));
-            $titleParts[] = 'Tanggal ' . $request->input('hari');
-        }
-        if ($request->filled('bulan')) {
-            $query->whereMonth('tanggal_masuk', $request->input('bulan'));
-            $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
-        }
-        if ($request->filled('tahun')) {
-            $query->whereYear('tanggal_masuk', $request->input('tahun'));
-            $titleParts[] = 'Tahun ' . $request->input('tahun');
-        }
-    }
-
-    $title = empty($titleParts)
-        ? 'Laporan Keseluruhan Inventaris'
-        : 'Laporan Inventaris ' . implode(', ', $titleParts);
-
-    $inventaris = $query->latest('tanggal_masuk')->get();
-
-    $data = [
-        'inventaris' => $inventaris,
-        'title'      => $title,
-        'date'       => date('d F Y')
-    ];
-
-    // 🔹 Generate PDF langsung ke memory (string binary)
-    $pdfBinary = Pdf::loadView('inventaris.pdf', $data)
-        ->setPaper('a4', 'landscape')
-        ->setOption('isRemoteEnabled', true)
-        ->output();
-
-    // 🔹 Nama file unik
-    $fileName = 'laporan-inventaris-' .
-        str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
-        '-' . date('Ymd') . '-' . Str::random(6) . '.pdf';
-
-    // 🔹 Upload langsung ke Supabase Storage
-    $response = Http::withHeaders([
-        'apikey'        => env('SUPABASE_KEY'),
-        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-    ])->attach(
-        'file',
-        $pdfBinary,  // langsung binary, tanpa file_put_contents
-        $fileName
-    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
-
-    if ($response->failed()) {
-        return back()->with('error', 'Gagal upload file ke Supabase: ' . $response->body());
-    }
-
-    // 🔹 Public URL Supabase (pastikan bucket "exports" public)
-    $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
-
-    // 🔹 Redirect user ke link download
-    return redirect()->away($downloadUrl);
+    return back()->with('status', 'Export sedang diproses. Link download akan tersedia sebentar lagi.');
 }
+
 
     // public function exportExcel()
     // {
@@ -729,37 +661,78 @@ class InventarisController extends Controller
     //     ]);
     // }
     public function exportExcel(Request $request)
-{
-    $export = new InventarisExport();
-    $fileName = 'inventaris_' . time() . '.xlsx';
+    {
+        $export   = new InventarisExport();
+        $fileName = 'inventaris_' . time() . '.xlsx';
 
-    // === generate excel binary
-    $content = Excel::raw($export, ExcelFormat::XLSX);
+        /**
+         * 1. Hapus file lama di bucket Supabase
+         */
+        $listResponse = Http::withHeaders([
+            'apikey'        => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+            'Content-Type'  => 'application/json',
+        ])->post(env('SUPABASE_URL') . '/storage/v1/object/list/exports', [
+            'prefix' => '', // semua file di folder exports/
+        ]);
 
-    // === upload ke Supabase
-    $response = Http::withHeaders([
-        'apikey'        => env('SUPABASE_KEY'),
-        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-    ])->attach(
-        'file',
-        $content,   // langsung binary string
-        $fileName
-    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+        if ($listResponse->ok()) {
+            $files = $listResponse->json();
+            foreach ($files as $file) {
+                if (!empty($file['name'])) {
+                    Http::withHeaders([
+                        'apikey'        => env('SUPABASE_KEY'),
+                        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+                        'Content-Type'  => 'application/json',
+                    ])->delete(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $file['name']);
+                }
+            }
+        }
 
-    if ($response->failed()) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Upload ke Supabase gagal',
-            'error'   => $response->body(),
-        ], 500);
+        /**
+         * 2. Generate Excel binary (langsung di memory)
+         */
+        $content = Excel::raw($export, ExcelFormat::XLSX);
+
+        /**
+         * 3. Simpan ke memory stream (tanpa filesystem, aman di Vercel)
+         */
+        $tmp = fopen('php://temp', 'r+');
+        fwrite($tmp, $content);
+        rewind($tmp);
+
+        /**
+         * 4. Upload ke Supabase bucket `exports/`
+         */
+        $uploadResponse = Http::withHeaders([
+            'apikey'        => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+        ])->attach(
+            'file',
+            $tmp,       // ✅ kirim stream, bukan string
+            $fileName
+        )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+        fclose($tmp);
+
+        if ($uploadResponse->failed()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload ke Supabase gagal',
+                'error'   => $uploadResponse->body(),
+            ], 500);
+        }
+
+        /**
+         * 5. Buat URL publik
+         */
+        $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
+
+        /**
+         * 6. Redirect supaya otomatis download
+         */
+        return redirect()->away($publicUrl);
     }
-
-    // === buat link publik
-    $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
-
-    // langsung redirect ke file asli (tetap format XLSX)
-    return redirect()->away($publicUrl);
-}
 
     public function print()
     {
