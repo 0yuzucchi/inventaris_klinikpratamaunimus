@@ -647,46 +647,70 @@ class InventarisController extends Controller
     //     ]);
     // }
     public function exportExcel(Request $request)
-{
-    $export = new InventarisExport();
+    {
+        $export = new InventarisExport();
 
-    // generate Excel content ke binary string
-    $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+        // generate Excel content ke binary string
+        $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
 
-    $fileName = 'inventaris_' . time() . '.xlsx';
+        $fileName = 'inventaris_' . time() . '.xlsx';
 
-    // simpan ke stream sementara (supaya mirip file asli)
-    $tmp = tmpfile();
-    fwrite($tmp, $content);
-    fseek($tmp, 0); // reset pointer
+        // === 1. Ambil daftar file lama di bucket exports/
+        $listResponse = Http::withHeaders([
+            'apikey'        => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+            'Content-Type'  => 'application/json',
+        ])->post(env('SUPABASE_URL') . '/storage/v1/object/list/exports', [
+            'prefix' => '', // ambil semua file di folder exports/
+        ]);
 
-    // Upload langsung ke Supabase
-    $response = Http::withHeaders([
-        'apikey'        => env('SUPABASE_KEY'),
-        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-    ])->attach(
-        'file',
-        $tmp,   // ⬅️ pakai stream, bukan string
-        $fileName
-    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+        if ($listResponse->ok()) {
+            $files = $listResponse->json();
+            foreach ($files as $file) {
+                if (!empty($file['name'])) {
+                    // === 2. Hapus file lama
+                    Http::withHeaders([
+                        'apikey'        => env('SUPABASE_KEY'),
+                        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+                        'Content-Type'  => 'application/json',
+                    ])->delete(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $file['name']);
+                }
+            }
+        }
 
-    // tutup stream
-    fclose($tmp);
+        // === 3. Upload file baru
+        $tmp = tmpfile();
+        fwrite($tmp, $content);
+        fseek($tmp, 0);
 
-    if ($response->failed()) {
+        $uploadResponse = Http::withHeaders([
+            'apikey'        => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+        ])->attach(
+            'file',
+            $tmp,
+            $fileName
+        )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+        fclose($tmp);
+
+        if ($uploadResponse->failed()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload ke Supabase gagal',
+                'error'   => $uploadResponse->body(),
+            ], 500);
+        }
+
+        // === 4. Buat link publik
+        $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
+
         return response()->json([
-            'success' => false,
-            'message' => 'Upload ke Supabase gagal',
-            'error'   => $response->body(),
-        ], 500);
+            'success'   => true,
+            'file_name' => $fileName,
+            'url'       => $publicUrl,
+        ]);
     }
-
-    // bikin link publik
-    $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
-
-    // langsung arahkan user supaya download
-    return redirect()->away($publicUrl);
-}
 
 
     public function print()
