@@ -137,7 +137,7 @@
                     $logoPath = 'logo_klinik.png'; // nama file logo di bucket Supabase
                 @endphp
 
-                <img src="{{ $logoBase64 }}" alt="Logo Klinik" style="width:75px; height:auto;">
+                <img src="https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png" alt="Logo Klinik" style="width:75px; height:auto;">
 
             </td>
 
@@ -189,7 +189,7 @@
                                 <img src="{{ $item->foto_url }}" alt="{{ $item->nama_barang }}">
                             @endif
                         @else
-                            <span>Tidak Ada Gambar</span>
+                            <span></span>
                         @endif
                     </td>
 

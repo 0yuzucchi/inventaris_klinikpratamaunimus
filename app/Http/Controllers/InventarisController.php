@@ -918,99 +918,41 @@ public function print()
 {
     $inventaris = Inventaris::latest()->get();
 
-    // --- Logo Klinik (base64) --- //
-    $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
-    $logoContents = Http::get($logoUrl)->body();
-    $logoBase64 = 'data:image/png;base64,' . base64_encode($logoContents);
-
-    // --- Foto tiap item (base64) --- //
-    $inventaris->transform(function ($item) {
-        if ($item->foto_url) {
-            try {
-                $contents = Http::get($item->foto_url)->body();
-                $item->foto_base64 = 'data:image/png;base64,' . base64_encode($contents);
-            } catch (\Exception $e) {
-                $item->foto_base64 = null;
-            }
-        } else {
-            $item->foto_base64 = null;
-        }
-        return $item;
-    });
-
-    // --- HTML string PDF --- //
-    $html = '<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<title>Laporan Inventaris</title>
-<style>
-body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
-th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
-.text-center { text-align: center; }
-.foto-container { width: 60px; height: 60px; text-align: center; }
-.foto-container img { max-width: 100%; max-height: 100%; }
-.header { text-align: center; margin-bottom: 20px; }
-.header img { width: 75px; height: auto; }
-</style>
-</head>
-<body>
-<div class="header">
-<img src="'.$logoBase64.'" alt="Logo Klinik">
-<h2>KLINIK PRATAMA UNIMUS</h2>
-<p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
-<p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
-<hr style="border:2px solid #000; margin-bottom:10px;">
-<h3 style="text-align:center;">Laporan Inventaris</h3>
-</div>
-<table>
-<thead>
-<tr>
-<th>No.</th>
-<th>Foto</th>
-<th>Nomor Barang</th>
-<th>Nama Barang</th>
-<th>Kode Barang</th>
-<th>Spesifikasi</th>
-<th>Jenis Perawatan</th>
-<th>Total</th>
-<th>Pakai</th>
-<th>Rusak</th>
-<th>Pemakaian</th>
-<th>Nomor Ruang</th>
-<th>Asal Perolehan</th>
-<th>Tanggal Masuk</th>
-</tr>
-</thead>
-<tbody>';
-
-    foreach ($inventaris as $i => $item) {
-        $html .= '<tr>
-<td class="text-center">'.($i+1).'</td>
-<td class="text-center foto-container">'.($item->foto_base64 ? '<img src="'.$item->foto_base64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar').'</td>
-<td>'.$item->nomor ?? 'N/A'.'</td>
-<td>'.$item->nama_barang?? '-'.'</td>
-<td>'.$item->kode_barang ?? '-'.'</td>
-<td>'.$item->spesifikasi ?? '-'.'</td>
-<td>'.$item->jenis_perawatan ?? ''.'</td>
-<td class="text-center">'.$item->jumlah.'</td>
-<td class="text-center">'.$item->jumlah_dipakai.'</td>
-<td class="text-center">'.$item->jumlah_rusak ?? ''.'</td>
-<td>'.$item->tempat_pemakaian.'</td>
-<td>'.$item->nomor_ruang ?? '-'.'</td>
-<td>'.$item->asal_perolehan ?? '-'.'</td>
-<td>'.Carbon::parse($item->tanggal_masuk)->format('Y-m-d H:i:s').'</td>
-</tr>';
+    $logoPath = null;
+    try {
+        $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
+        $contents = file_get_contents($logoUrl);
+        $tempPath = tempnam(sys_get_temp_dir(), 'logo');
+        file_put_contents($tempPath, $contents);
+        $logoPath = $tempPath;
+    } catch (\Exception $e) {
+        $logoPath = null;
     }
 
-    $html .= '</tbody></table></body></html>';
+    // 1. Buat objek PDF seperti biasa
+    $pdf = Pdf::loadView('inventaris.pdf', [
+        'inventaris' => $inventaris,
+        'logoPath'   => $logoPath,
+    ])->setPaper('a4', 'landscape');
 
-    // --- Generate PDF dan stream --- //
-    $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+    // Hapus file logo sementara SEBELUM mengirim response
+    if ($logoPath) {
+        unlink($logoPath);
+    }
 
-    return $pdf->stream('laporan-inventaris-' . date('Ymd') . '.pdf');
+    $fileName = 'inventaris.pdf';
+
+    // 2. Buat StreamedResponse secara manual
+    return new StreamedResponse(function () use ($pdf) {
+        // Gunakan echo untuk mengirim output dari PDF
+        // $pdf->output() mengambil konten PDF mentah sebagai string
+        echo $pdf->output();
+    }, 200, [
+        // 3. Atur header yang BENAR untuk file PDF
+        'Content-Type' => 'application/pdf',
+        'Content-Disposition' => 'inline; filename="'.$fileName.'"', 
+        // 'inline' akan mencoba membuka di browser, 'attachment' akan langsung download
+    ]);
 }
 
 }
