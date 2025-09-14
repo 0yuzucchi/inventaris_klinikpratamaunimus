@@ -632,20 +632,54 @@ class InventarisController extends Controller
             ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
     }
 
-    public function exportExcel()
-    {
-        $export = new InventarisExport();
+    // public function exportExcel()
+    // {
+    //     $export = new InventarisExport();
 
-        // gunakan Excel::raw agar tidak menulis ke disk (sesuai serverless)
-        $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+    //     // gunakan Excel::raw agar tidak menulis ke disk (sesuai serverless)
+    //     $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
 
-        return new StreamedResponse(function () use ($content) {
-            echo $content;
-        }, 200, [
-            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="inventaris.xlsx"',
-        ]);
+    //     return new StreamedResponse(function () use ($content) {
+    //         echo $content;
+    //     }, 200, [
+    //         'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    //         'Content-Disposition' => 'attachment; filename="inventaris.xlsx"',
+    //     ]);
+    // }
+    public function exportExcel(Request $request)
+{
+    $export = new InventarisExport();
+
+    // generate file ke memory (string binary excel)
+    $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+
+    $fileName = 'inventaris_' . time() . '.xlsx';
+
+    // Upload langsung ke Supabase Storage
+    $response = Http::withHeaders([
+        'apikey'        => env('SUPABASE_KEY'),
+        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+    ])->attach(
+        'file',
+        $content,
+        $fileName
+    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+    if ($response->failed()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Upload ke Supabase gagal',
+            'error'   => $response->body(),
+        ], 500);
     }
+
+    // bikin link publik
+    $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
+
+    // 🔹 Langsung redirect supaya browser download
+    return redirect()->away($publicUrl);
+}
+
 
     public function print()
     {
