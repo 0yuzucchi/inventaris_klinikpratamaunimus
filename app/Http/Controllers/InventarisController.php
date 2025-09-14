@@ -652,7 +652,7 @@ class InventarisController extends Controller
         ? 'Laporan Keseluruhan Inventaris'
         : 'Laporan Inventaris ' . implode(', ', $titleParts);
     
-    $fileName = 'reports/laporan-inventaris-' . // Simpan dalam folder 'reports'
+    $fileName = 'exports/laporan-inventaris-' . // Simpan dalam folder 'reports'
         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
         '-' . now()->timestamp . '.pdf'; // Gunakan timestamp agar unik
 
