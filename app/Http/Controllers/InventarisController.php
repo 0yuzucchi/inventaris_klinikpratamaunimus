@@ -918,13 +918,13 @@ public function print()
 {
     $inventaris = Inventaris::latest()->get();
 
-    // Ambil logo dari URL
+    // --- Logo Klinik (base64) --- //
     $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
     $logoContents = Http::get($logoUrl)->body();
     $logoBase64 = 'data:image/png;base64,' . base64_encode($logoContents);
 
-    // Convert tiap foto inventaris ke base64
-    $inventaris->transform(function($item) {
+    // --- Foto tiap item (base64) --- //
+    $inventaris->transform(function ($item) {
         if ($item->foto_url) {
             try {
                 $contents = Http::get($item->foto_url)->body();
@@ -938,10 +938,77 @@ public function print()
         return $item;
     });
 
-    $pdf = Pdf::loadView('inventaris.pdf', [
-        'inventaris' => $inventaris,
-        'logoBase64' => $logoBase64,
-    ])->setPaper('a4', 'landscape');
+    // --- HTML string PDF --- //
+    $html = '<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Laporan Inventaris</title>
+<style>
+body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
+th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+.text-center { text-align: center; }
+.foto-container { width: 60px; height: 60px; text-align: center; }
+.foto-container img { max-width: 100%; max-height: 100%; }
+.header { text-align: center; margin-bottom: 20px; }
+.header img { width: 75px; height: auto; }
+</style>
+</head>
+<body>
+<div class="header">
+<img src="'.$logoBase64.'" alt="Logo Klinik">
+<h2>KLINIK PRATAMA UNIMUS</h2>
+<p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
+<p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
+<hr style="border:2px solid #000; margin-bottom:10px;">
+<h3 style="text-align:center;">Laporan Inventaris</h3>
+</div>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Foto</th>
+<th>Nomor Barang</th>
+<th>Nama Barang</th>
+<th>Kode Barang</th>
+<th>Spesifikasi</th>
+<th>Jenis Perawatan</th>
+<th>Total</th>
+<th>Pakai</th>
+<th>Rusak</th>
+<th>Pemakaian</th>
+<th>Nomor Ruang</th>
+<th>Asal Perolehan</th>
+<th>Tanggal Masuk</th>
+</tr>
+</thead>
+<tbody>';
+
+    foreach ($inventaris as $i => $item) {
+        $html .= '<tr>
+<td class="text-center">'.($i+1).'</td>
+<td class="text-center foto-container">'.($item->foto_base64 ? '<img src="'.$item->foto_base64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar').'</td>
+<td>'.$item->nomor ?? 'N/A'.'</td>
+<td>'.$item->nama_barang?? '-'.'</td>
+<td>'.$item->kode_barang ?? '-'.'</td>
+<td>'.$item->spesifikasi ?? '-'.'</td>
+<td>'.$item->jenis_perawatan ?? ''.'</td>
+<td class="text-center">'.$item->jumlah.'</td>
+<td class="text-center">'.$item->jumlah_dipakai.'</td>
+<td class="text-center">'.$item->jumlah_rusak ?? ''.'</td>
+<td>'.$item->tempat_pemakaian.'</td>
+<td>'.$item->nomor_ruang ?? '-'.'</td>
+<td>'.$item->asal_perolehan ?? '-'.'</td>
+<td>'.Carbon::parse($item->tanggal_masuk)->format('Y-m-d H:i:s').'</td>
+</tr>';
+    }
+
+    $html .= '</tbody></table></body></html>';
+
+    // --- Generate PDF dan stream --- //
+    $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
 
     return $pdf->stream('laporan-inventaris-' . date('Ymd') . '.pdf');
 }

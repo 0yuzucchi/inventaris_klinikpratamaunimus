@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Inventaris;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
@@ -21,7 +20,7 @@ class InventarisExportController extends Controller
     }
 
     /**
-     * Generate PDF & upload ke Supabase
+     * Generate PDF & kembalikan dalam base64
      */
     public function getPdfUploadUrl(Request $request)
     {
@@ -60,20 +59,23 @@ class InventarisExportController extends Controller
                 }
             }
 
-            $inventaris = $query->latest('tanggal_masuk')->get();
+            // Ambil data & pastikan semua string UTF-8
+            $inventaris = $query->latest('tanggal_masuk')->get()->map(function($item) {
+                foreach ($item->getAttributes() as $key => $value) {
+                    if (is_string($value)) {
+                        $item->$key = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+                    }
+                }
+                return $item;
+            });
 
             $title = empty($titleParts) ? 'Laporan Keseluruhan Inventaris' : 'Laporan Inventaris ' . implode(', ', $titleParts);
 
-            // 3. Siapkan logo base64
-            $logoPath = public_path('logo_klinik.png'); // pastikan file ini ada
-            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
-
-            // 4. Siapkan foto inventaris base64
-            foreach ($inventaris as $item) {
-                $item->fotoBase64 = $item->foto_url
-                    ? 'data:image/png;base64,' . base64_encode(@file_get_contents($item->foto_url))
-                    : null;
-            }
+            // 3. Logo base64
+            $logoPath = public_path('logo_klinik.png');
+            $logoBase64 = file_exists($logoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+                : '';
 
             $data = [
                 'inventaris' => $inventaris,
@@ -82,33 +84,20 @@ class InventarisExportController extends Controller
                 'logoBase64' => $logoBase64,
             ];
 
+            // 4. Nama file
+            $fileName = 'laporan-inventaris-' . str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) . '-' . date('Ymd-His') . '.pdf';
+
             // 5. Generate PDF
             $pdfContent = Pdf::loadView('inventaris.pdf', $data)
                 ->setOption('isRemoteEnabled', true)
                 ->setPaper('a4', 'landscape')
                 ->output();
 
-            // 6. Upload ke Supabase
-            $bucket = 'inventaris-fotos';
-            $fileName = 'laporan-inventaris-' . date('Ymd-His') . '.pdf';
-
-            $response = Http::withHeaders([
-                'apikey' => env('SUPABASE_SERVICE_ROLE_KEY'),
-                'Authorization' => 'Bearer ' . env('SUPABASE_SERVICE_ROLE_KEY'),
-            ])->put(env('SUPABASE_URL') . "/storage/v1/object/{$bucket}/{$fileName}", $pdfContent);
-
-            if ($response->failed()) {
-                return response()->json([
-                    'error' => 'Upload ke Supabase gagal',
-                    'body' => $response->body()
-                ], 500);
-            }
-
-            $publicUrl = env('SUPABASE_URL') . "/storage/v1/object/public/{$bucket}/{$fileName}";
+            $pdfBase64 = base64_encode($pdfContent);
 
             return response()->json([
                 'fileName' => $fileName,
-                'fileUrl' => $publicUrl,
+                'pdfBase64' => $pdfBase64,
             ]);
 
         } catch (\Exception $e) {

@@ -1,49 +1,55 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const Export = () => {
-    const [loading, setLoading] = useState(false);
-    const [fileUrl, setFileUrl] = useState(null);
+export default function Export() {
+  const [loading, setLoading] = useState(false);
 
-    const exportPdf = async () => {
-        try {
-            setLoading(true);
-            const response = await axios.post('/inventaris/get-pdf-upload-url', {
-                tahun: '', // isi sesuai filter
-                bulan: '',
-                hari: '',
-                tanggal_mulai: '',
-                tanggal_selesai: ''
-            });
+  const downloadPdf = async () => {
+    try {
+      setLoading(true);
 
-            setFileUrl(response.data.fileUrl);
-            alert('PDF berhasil dibuat dan di-upload ke Supabase!');
-        } catch (err) {
-            console.error(err);
-            alert('Terjadi kesalahan saat generate PDF');
-        } finally {
-            setLoading(false);
-        }
-    };
+      const response = await axios.post('/inventaris/get-pdf-upload-url', {
+        // kirim filter tanggal kalau ada
+        // tahun: '2025',
+        // bulan: '09',
+        // hari: '14',
+        // tanggal_mulai: '2025-09-01',
+        // tanggal_selesai: '2025-09-14'
+      });
 
-    return (
-        <div className="p-4">
-            <h1 className="text-xl font-bold mb-4">Export Laporan Inventaris</h1>
-            <button
-                onClick={exportPdf}
-                className="bg-blue-600 text-white px-4 py-2 rounded"
-                disabled={loading}
-            >
-                {loading ? 'Membuat PDF...' : 'Buat PDF & Upload'}
-            </button>
+      const { fileName, pdfBase64 } = response.data;
 
-            {fileUrl && (
-                <div className="mt-4">
-                    <p>Link PDF: <a href={fileUrl} target="_blank" className="text-blue-700 underline">{fileUrl}</a></p>
-                </div>
-            )}
-        </div>
-    );
-};
+      // Convert base64 ke Blob
+      const linkSource = `data:application/pdf;base64,${pdfBase64}`;
+      const downloadLink = document.createElement('a');
+      const blob = await (await fetch(linkSource)).blob();
+      const url = URL.createObjectURL(blob);
 
-export default Export;
+      downloadLink.href = url;
+      downloadLink.download = fileName;
+      downloadLink.click();
+
+      // Bersihkan URL object
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('Gagal download PDF:', error);
+      alert('Gagal generate PDF. Cek console untuk detail.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-4">
+      <h1 className="text-xl font-bold mb-4">Export Laporan Inventaris</h1>
+      <button
+        onClick={downloadPdf}
+        disabled={loading}
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? 'Membuat PDF...' : 'Download PDF'}
+      </button>
+    </div>
+  );
+}
