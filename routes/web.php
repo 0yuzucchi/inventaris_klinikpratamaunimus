@@ -6,6 +6,10 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PanduanController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\FileUploadController;
+
+Route::get('/upload', [FileUploadController::class, 'showForm'])->name('upload.form');
+Route::post('/upload', [FileUploadController::class, 'upload'])->name('upload.submit');
 
 // Route untuk menampilkan halaman form filter
 Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
