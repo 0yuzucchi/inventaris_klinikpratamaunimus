@@ -21,6 +21,8 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Http;
 use App\Jobs\ExportInventarisJob;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class InventarisController extends Controller
 {
@@ -649,8 +651,7 @@ class InventarisController extends Controller
 
     if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
         $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
-        $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
-
+        $endDate   = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
         $query->whereBetween('tanggal_masuk', [
             $request->input('tanggal_mulai'),
             $request->input('tanggal_selesai')
@@ -683,17 +684,15 @@ class InventarisController extends Controller
         'date'       => date('d F Y')
     ];
 
-    // 🔹 Generate PDF di memory
     $pdf = Pdf::loadView('inventaris.pdf', $data)->setPaper('a4', 'landscape');
     $pdf->setOption('isRemoteEnabled', true);
     $pdfContent = $pdf->output();
 
-    // 🔹 Nama file unik
     $fileName = 'laporan-inventaris-' .
         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
         '-' . date('Ymd') . '-' . Str::random(6) . '.pdf';
 
-    // 🔹 Upload ke Supabase (bucket: exports)
+    // upload ke Supabase
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
@@ -704,15 +703,16 @@ class InventarisController extends Controller
     )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
 
     if ($response->failed()) {
-    return response()->json(['error' => 'Gagal upload file ke Supabase', 'detail' => $response->body()], 500);
+        return response()->json(['error' => 'Gagal upload file ke Supabase', 'detail' => $response->body()], 500);
+    }
+
+    // dapatkan URL publik
+    $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
+
+    // redirect ke file
+    return redirect()->away($downloadUrl);
 }
 
-// 🔹 Public URL (kalau bucket public)
-$downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
-
-// 🔹 Redirect langsung ke PDF
-return $pdf->download($fileName);
-}
 
 
 
@@ -734,32 +734,44 @@ return $pdf->download($fileName);
     //         'Content-Disposition' => 'attachment; filename="inventaris.xlsx"',
     //     ]);
     // }
-    public function exportExcel()
+
+public function exportExcel()
 {
-    $fileName = 'inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+    // 🔹 Generate Excel pakai PhpSpreadsheet
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setCellValue('A1', 'Hello World!'); // contoh isi
 
-    // 🔹 Generate Excel ke binary string
-    $excelContent = Excel::raw(new InventarisExport, \Maatwebsite\Excel\Excel::XLSX);
+    // 🔹 Simpan sementara ke storage Laravel
+    $fileName = 'laporan-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+    $path = storage_path('app/' . $fileName);
 
-    // 🔹 Upload ke Supabase bucket "exports"
+    $writer = new Xlsx($spreadsheet);
+    $writer->save($path);
+
+    // 🔹 Upload ke Supabase via binary stream
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
         'Content-Type'  => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ])->withBody(
-        $excelContent,
+        file_get_contents($path),
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+    )->put(
+        rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/exports/' . $fileName
+    );
+
+    // 🔹 Hapus file lokal biar nggak numpuk
+    @unlink($path);
 
     if ($response->failed()) {
         return response()->json([
             'success' => false,
-            'message' => 'Gagal upload file ke Supabase',
             'error'   => $response->body(),
         ], 500);
     }
 
-    // 🔹 Link public
+    // 🔹 Buat link publik
     $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
 
     return response()->json([
