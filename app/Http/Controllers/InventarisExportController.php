@@ -17,11 +17,11 @@ class InventarisExportController extends Controller
      */
     public function index()
     {
-        return Inertia::render('Inventaris/Export'); 
+        return Inertia::render('Inventaris/Export');
     }
 
     /**
-     * Generate PDF & buat pre-signed URL untuk upload ke Supabase
+     * Generate PDF & upload ke Supabase
      */
     public function getPdfUploadUrl(Request $request)
     {
@@ -64,45 +64,51 @@ class InventarisExportController extends Controller
 
             $title = empty($titleParts) ? 'Laporan Keseluruhan Inventaris' : 'Laporan Inventaris ' . implode(', ', $titleParts);
 
+            // 3. Siapkan logo base64
+            $logoPath = public_path('logo_klinik.png'); // pastikan file ini ada
+            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+
+            // 4. Siapkan foto inventaris base64
+            foreach ($inventaris as $item) {
+                $item->fotoBase64 = $item->foto_url
+                    ? 'data:image/png;base64,' . base64_encode(@file_get_contents($item->foto_url))
+                    : null;
+            }
+
             $data = [
                 'inventaris' => $inventaris,
                 'title' => $title,
                 'date' => Carbon::now()->format('d F Y'),
+                'logoBase64' => $logoBase64,
             ];
 
-            $fileName = 'laporan-inventaris-' . str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) . '-' . date('Ymd') . '.pdf';
-
-            // 3. Generate PDF
+            // 5. Generate PDF
             $pdfContent = Pdf::loadView('inventaris.pdf', $data)
                 ->setOption('isRemoteEnabled', true)
                 ->setPaper('a4', 'landscape')
                 ->output();
 
-            // 4. Pre-signed URL Supabase
+            // 6. Upload ke Supabase
             $bucket = 'inventaris-fotos';
+            $fileName = 'laporan-inventaris-' . date('Ymd-His') . '.pdf';
+
             $response = Http::withHeaders([
-                'apikey' => env('SUPABASE_KEY'),
-                'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-            ])->post(env('SUPABASE_URL') . "/storage/v1/object/sign/{$bucket}/{$fileName}", [
-                'expiresIn' => 60 * 5 // URL berlaku 5 menit
-            ]);
+                'apikey' => env('SUPABASE_SERVICE_ROLE_KEY'),
+                'Authorization' => 'Bearer ' . env('SUPABASE_SERVICE_ROLE_KEY'),
+            ])->put(env('SUPABASE_URL') . "/storage/v1/object/{$bucket}/{$fileName}", $pdfContent);
 
             if ($response->failed()) {
-                Log::error('Gagal buat pre-signed URL Supabase: ' . $response->body());
-                return response()->json(['error' => 'Gagal buat URL upload ke Supabase'], 500);
+                return response()->json([
+                    'error' => 'Upload ke Supabase gagal',
+                    'body' => $response->body()
+                ], 500);
             }
 
-            $signedUrl = $response->json()['signedUrl'] ?? null;
-            if (!$signedUrl) {
-                Log::error('Pre-signed URL kosong dari Supabase');
-                return response()->json(['error' => 'Pre-signed URL kosong'], 500);
-            }
+            $publicUrl = env('SUPABASE_URL') . "/storage/v1/object/public/{$bucket}/{$fileName}";
 
-            // 5. Return JSON ke frontend
             return response()->json([
                 'fileName' => $fileName,
-                'pdfBase64' => base64_encode($pdfContent),
-                'signedUrl' => $signedUrl
+                'fileUrl' => $publicUrl,
             ]);
 
         } catch (\Exception $e) {

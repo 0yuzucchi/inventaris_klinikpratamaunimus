@@ -137,8 +137,8 @@
                     $logoPath = 'logo_klinik.png'; // nama file logo di bucket Supabase
                 @endphp
 
-                <img src="{{ $supabaseUrl }}/storage/v1/object/public/{{ $bucket }}/{{ $logoPath }}"
-                    alt="Logo">
+                <img src="{{ $logoBase64 }}" alt="Logo Klinik" style="width:75px; height:auto;">
+
             </td>
 
             <td class="text-cell">
@@ -182,16 +182,12 @@
                 <tr>
                     <td class="text-center">{{ $loop->iteration }}</td>
                     <td class="text-center foto-container">
-                        @if ($item->foto_url)
-                            @if (request()->routeIs('inventaris.exportPDF'))
-                                <img src="{{ $item->foto_url }}" alt="{{ $item->nama_barang }}">
-                            @else
-                                <img src="{{ $item->foto_url }}" alt="{{ $item->nama_barang }}">
-                            @endif
-                        @else
-                            <span>Tidak Ada Gambar</span>
-                        @endif
-                    </td>
+    @if ($item->foto_base64)
+        <img src="{{ $item->foto_base64 }}" alt="{{ $item->nama_barang }}">
+    @else
+        <span></span>
+    @endif
+</td>
 
                     <td class="text-center">{{ $item->nomor ?: 'N/A' }}</td>
                     <td>

@@ -13,9 +13,10 @@ use App\Http\Controllers\ReportController;
 
 use App\Http\Controllers\InventarisExportController;
 
-Route::get('/inventaris/export', [InventarisExportController::class, 'index'])->name('inventaris.export.index');
-Route::post('/inventaris/get-pdf-upload-url', [InventarisExportController::class, 'getPdfUploadUrl'])->name('inventaris.export.get-pdf-upload-url');
-
+Route::prefix('inventaris')->group(function() {
+    Route::get('/export', [InventarisExportController::class, 'index'])->name('inventaris.export');
+    Route::post('/get-pdf-upload-url', [InventarisExportController::class, 'getPdfUploadUrl'])->name('inventaris.getPdfUploadUrl');
+});
 
 
 
