@@ -650,20 +650,28 @@ class InventarisController extends Controller
 {
     $export = new InventarisExport();
 
-    // generate file ke memory (string binary excel)
+    // generate Excel content ke binary string
     $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
 
     $fileName = 'inventaris_' . time() . '.xlsx';
 
-    // Upload langsung ke Supabase Storage
+    // simpan ke stream sementara (supaya mirip file asli)
+    $tmp = tmpfile();
+    fwrite($tmp, $content);
+    fseek($tmp, 0); // reset pointer
+
+    // Upload langsung ke Supabase
     $response = Http::withHeaders([
         'apikey'        => env('SUPABASE_KEY'),
         'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
     ])->attach(
         'file',
-        $content,
+        $tmp,   // ⬅️ pakai stream, bukan string
         $fileName
     )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+    // tutup stream
+    fclose($tmp);
 
     if ($response->failed()) {
         return response()->json([
@@ -676,7 +684,7 @@ class InventarisController extends Controller
     // bikin link publik
     $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
 
-    // 🔹 Langsung redirect supaya browser download
+    // langsung arahkan user supaya download
     return redirect()->away($publicUrl);
 }
 
