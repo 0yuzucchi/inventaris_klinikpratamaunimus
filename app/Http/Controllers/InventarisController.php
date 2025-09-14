@@ -915,44 +915,142 @@ public function showExportForm()
     // }
 
 public function print()
-{
-    $inventaris = Inventaris::latest()->get();
+    {
+        // ===================================================================
+        // 1. PERSIAPAN DATA
+        // ===================================================================
 
-    $logoPath = null;
-    try {
-        $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
-        $contents = file_get_contents($logoUrl);
-        $tempPath = tempnam(sys_get_temp_dir(), 'logo');
-        file_put_contents($tempPath, $contents);
-        $logoPath = $tempPath;
-    } catch (\Exception $e) {
-        $logoPath = null;
+        $inventaris = Inventaris::latest()->get();
+
+        // --- Logo Klinik --- //
+        $logoBase64 = null;
+        try {
+            $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
+            // Menambahkan timeout untuk mencegah proses berhenti lama jika URL lambat
+            $logoContents = Http::timeout(10)->get($logoUrl)->body();
+            $logoBase64 = 'data:image/png;base64,' . base64_encode($logoContents);
+        } catch (\Exception $e) {
+            // Biarkan logo null jika gagal diunduh, tidak menghentikan proses
+            $logoBase64 = null;
+        }
+
+        // --- Foto tiap inventaris --- //
+        // Proses ini bisa memakan waktu jika datanya banyak
+        $inventaris->transform(function ($item) {
+            if ($item->foto_url) {
+                try {
+                    $contents = Http::timeout(5)->get($item->foto_url)->body();
+                    $item->foto_base64 = 'data:image/png;base64,' . base64_encode($contents);
+                } catch (\Exception $e) {
+                    $item->foto_base64 = null;
+                }
+            } else {
+                $item->foto_base64 = null;
+            }
+            return $item;
+        });
+
+        // ===================================================================
+        // 2. KONSTRUKSI STRING HTML
+        // ===================================================================
+
+        // Menggunakan sintaks Heredoc (<<<HTML) agar lebih rapi
+        $logoHtml = $logoBase64 ? '<img src="'.$logoBase64.'" alt="Logo Klinik">' : '';
+
+        $html = <<<HTML
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="utf-8">
+            <title>Laporan Inventaris</title>
+            <style>
+                body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; word-wrap: break-word; }
+                th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+                .text-center { text-align: center; }
+                .foto-container { width: 60px; height: 60px; text-align: center; }
+                .foto-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header img { width: 75px; height: auto; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                {$logoHtml}
+                <h2>KLINIK PRATAMA UNIMUS</h2>
+                <p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
+                <p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
+                <hr style="border:1px solid #000; margin-bottom:10px;">
+                <h3 style="text-align:center;">Laporan Inventaris</h3>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th><th>Foto</th><th>Nomor Barang</th><th>Nama Barang</th><th>Kode Barang</th>
+                        <th>Spesifikasi</th><th>Jenis Perawatan</th><th>Total</th><th>Pakai</th><th>Rusak</th>
+                        <th>Pemakaian</th><th>Nomor Ruang</th><th>Asal Perolehan</th><th>Tanggal Masuk</th>
+                    </tr>
+                </thead>
+                <tbody>
+        HTML;
+
+        // Looping untuk membangun setiap baris tabel
+        foreach ($inventaris as $i => $item) {
+            $fotoHtml = $item->foto_base64 ? '<img src="'.$item->foto_base64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
+
+            // Menyiapkan variabel untuk memastikan data null ditampilkan dengan benar dan aman
+            $nomor = htmlspecialchars($item->nomor ?? 'N/A');
+            $nama_barang = htmlspecialchars($item->nama_barang ?? '-');
+            $kode_barang = htmlspecialchars($item->kode_barang ?? '-');
+            $spesifikasi = htmlspecialchars($item->spesifikasi ?? '-');
+            $jenis_perawatan = htmlspecialchars($item->jenis_perawatan ?? '');
+            $jumlah_rusak = htmlspecialchars($item->jumlah_rusak ?? '');
+            $tempat_pemakaian = htmlspecialchars($item->tempat_pemakaian ?? '-');
+            $nomor_ruang = htmlspecialchars($item->nomor_ruang ?? '-');
+            $asal_perolehan = htmlspecialchars($item->asal_perolehan ?? '-');
+            $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
+
+            $html .= "<tr>
+                        <td class='text-center'>".($i+1)."</td>
+                        <td class='text-center foto-container'>{$fotoHtml}</td>
+                        <td>{$nomor}</td>
+                        <td>{$nama_barang}</td>
+                        <td>{$kode_barang}</td>
+                        <td>{$spesifikasi}</td>
+                        <td>{$jenis_perawatan}</td>
+                        <td class='text-center'>".($item->jumlah ?? 0)."</td>
+                        <td class='text-center'>".($item->jumlah_dipakai ?? 0)."</td>
+                        <td class='text-center'>{$jumlah_rusak}</td>
+                        <td>{$tempat_pemakaian}</td>
+                        <td class='text-center'>{$nomor_ruang}</td>
+                        <td>{$asal_perolehan}</td>
+                        <td class='text-center'>{$tanggal_masuk}</td>
+                    </tr>";
+        }
+
+        $html .= '</tbody></table></body></html>';
+
+        // ===================================================================
+        // 3. PDF GENERATION & STREAMING
+        // ===================================================================
+
+        // Membuat objek PDF dari string HTML
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+        $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
+
+        // Menggunakan StreamedResponse untuk mengirimkan file
+        return new StreamedResponse(
+            function () use ($pdf) {
+                // `echo` akan mengirimkan output langsung ke browser
+                echo $pdf->output();
+            },
+            200, // Kode status HTTP OK
+            [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            ]
+        );
     }
-
-    // 1. Buat objek PDF seperti biasa
-    $pdf = Pdf::loadView('inventaris.pdf', [
-        'inventaris' => $inventaris,
-        'logoPath'   => $logoPath,
-    ])->setPaper('a4', 'landscape');
-
-    // Hapus file logo sementara SEBELUM mengirim response
-    if ($logoPath) {
-        unlink($logoPath);
-    }
-
-    $fileName = 'inventaris.pdf';
-
-    // 2. Buat StreamedResponse secara manual
-    return new StreamedResponse(function () use ($pdf) {
-        // Gunakan echo untuk mengirim output dari PDF
-        // $pdf->output() mengambil konten PDF mentah sebagai string
-        echo $pdf->output();
-    }, 200, [
-        // 3. Atur header yang BENAR untuk file PDF
-        'Content-Type' => 'application/pdf',
-        'Content-Disposition' => 'inline; filename="'.$fileName.'"', 
-        // 'inline' akan mencoba membuka di browser, 'attachment' akan langsung download
-    ]);
-}
 
 }

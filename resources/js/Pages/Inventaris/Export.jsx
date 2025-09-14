@@ -2,36 +2,68 @@ import React, { useState } from 'react';
 import axios from 'axios';
 
 export default function Export() {
-    const [loading, setLoading] = useState(false);
-    const [fileUrl, setFileUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [error, setError] = useState(null);
 
-    const uploadPdf = async () => {
-        setLoading(true);
-        try {
-            const fileName = `laporan-inventaris-${new Date().toISOString()}.pdf`;
-            const response = await axios.post('/inventaris/get-presigned-url', { fileName });
-            setFileUrl(response.data.fileUrl);
-        } catch (error) {
-            console.error(error);
-            alert('Gagal generate/upload PDF');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleGeneratePdf = async () => {
+    setLoading(true);
+    setError(null);
+    setPdfUrl(null);
 
-    return (
-        <div>
-            <h1>Export Inventaris ke PDF</h1>
-            <button onClick={uploadPdf} disabled={loading}>
-                {loading ? 'Proses...' : 'Generate & Upload PDF'}
-            </button>
+    try {
+      const fileName = `laporan-inventaris-${new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')}.pdf`;
 
-            {fileUrl && (
-                <div>
-                    <p>File berhasil dibuat:</p>
-                    <a href={fileUrl} target="_blank" rel="noopener noreferrer">{fileUrl}</a>
-                </div>
-            )}
+      // Sesuaikan URL endpoint Laravel
+      const response = await axios.post(
+        'http://localhost:8001/inventaris/get-pdf-upload-url',
+        { fileName }
+      );
+
+      // Ambil field sesuai return dari controller
+      // Misal controller mengembalikan: { signedURL: '...' }
+      setPdfUrl(response.data.signedURL || response.data.url);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-4">
+      <h1 className="text-xl font-bold mb-4">Export Laporan Inventaris</h1>
+
+      <button
+        onClick={handleGeneratePdf}
+        disabled={loading}
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? 'Memproses...' : 'Generate PDF'}
+      </button>
+
+      {error && (
+        <div className="mt-4 text-red-600 font-medium">
+          Terjadi kesalahan: {error}
         </div>
-    );
+      )}
+
+      {pdfUrl && (
+        <div className="mt-4">
+          <p>PDF berhasil dibuat! Klik link di bawah untuk download:</p>
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline"
+          >
+            Download PDF
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
