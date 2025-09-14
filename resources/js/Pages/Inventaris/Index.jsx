@@ -284,6 +284,7 @@ export default function Index({ inventarisGrouped, auth }) {
         >
             <Head title="Daftar Inventaris" />
             <main className="bg-slate-100 dark:bg-slate-900 min-h-screen">
+                
                 <div className="container mx-auto p-4 sm:p-6 lg:p-8">
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg">
 

@@ -776,6 +776,91 @@ public function showExportForm()
         return $pdf->download($fileName);
     }
 
+    public function getPdfUploadUrl(Request $request)
+    {
+        // 1. Validasi input filter
+        $request->validate([
+            'tahun'    => 'nullable|date_format:Y',
+            'bulan'    => 'nullable|date_format:m',
+            'hari'     => 'nullable|date_format:d',
+            'tanggal_mulai'  => 'nullable|date',
+            'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+        ]);
+
+        // 2. Bangun query Inventaris
+        $query = Inventaris::query();
+        $titleParts = [];
+
+        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+            $query->whereBetween('tanggal_masuk', [
+                $request->input('tanggal_mulai'),
+                $request->input('tanggal_selesai')
+            ]);
+
+            $titleParts[] = "dari " . Carbon::parse($request->input('tanggal_mulai'))->format('d F Y') .
+                            " sampai " . Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+        } else {
+            if ($request->filled('hari')) {
+                $query->whereDay('tanggal_masuk', $request->input('hari'));
+                $titleParts[] = 'Tanggal ' . $request->input('hari');
+            }
+            if ($request->filled('bulan')) {
+                $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+                $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
+            }
+            if ($request->filled('tahun')) {
+                $query->whereYear('tanggal_masuk', $request->input('tahun'));
+                $titleParts[] = 'Tahun ' . $request->input('tahun');
+            }
+        }
+
+        $title = empty($titleParts)
+            ? 'Laporan Keseluruhan Inventaris'
+            : 'Laporan Inventaris ' . implode(', ', $titleParts);
+
+        $inventaris = $query->latest('tanggal_masuk')->get();
+
+        $data = [
+            'inventaris' => $inventaris,
+            'title'      => $title,
+            'date'       => date('d F Y'),
+        ];
+
+        // 3. Nama file PDF
+        $fileName = 'laporan-inventaris-' .
+            str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+            '-' . date('Ymd') . '.pdf';
+
+        // 4. Generate PDF sebagai string
+        $pdfContent = Pdf::loadView('inventaris.pdf', $data)
+            ->setOption('isRemoteEnabled', true)
+            ->setPaper('a4', 'landscape')
+            ->output();
+
+        // 5. Buat pre-signed URL Supabase
+        $bucket = env('SUPABASE_BUCKET', 'inventaris-fotos');
+        $response = Http::withHeaders([
+            'apikey' => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+        ])->post(env('SUPABASE_URL') . "/storage/v1/object/sign/{$bucket}/{$fileName}", [
+            'expiresIn' => 60 * 5 // URL berlaku 5 menit
+        ]);
+
+        if ($response->failed()) {
+            return response()->json(['error' => 'Gagal buat URL upload'], 500);
+        }
+
+        $signedUrl = $response->json()['signedUrl'];
+
+        // 6. Kirim ke frontend
+        return response()->json([
+            'fileName'  => $fileName,
+            'pdfBase64' => base64_encode($pdfContent),
+            'signedUrl' => $signedUrl,
+        ]);
+    }
+
+
 
 
 
@@ -801,7 +886,6 @@ public function showExportForm()
 
     public function exportExcel()
 {
-    // --- Data Contoh (sesuaikan dengan data asli dari database Anda) ---
     $export = new InventarisExport();
     $data = $export->collection();
 
@@ -809,24 +893,25 @@ public function showExportForm()
     $sheet = $spreadsheet->getActiveSheet();
 
     // --- Header Utama --- //
-    // Ambil logo dari URL
-$logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
-$tempPath = sys_get_temp_dir() . '/logo_klinik.png';
-file_put_contents($tempPath, file_get_contents($logoUrl));    $imageContents = file_get_contents($logoUrl);
-    $drawing = new Drawing();
-$drawing->setName('Logo Klinik');
-$drawing->setDescription('Logo Klinik');
-$drawing->setPath($tempPath); // pakai file lokal
-$drawing->setHeight(60);
-$drawing->setCoordinates('A1');
-$drawing->setWorksheet($sheet);
+    $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
+    $tempPath = sys_get_temp_dir() . '/logo_klinik.png';
+    file_put_contents($tempPath, file_get_contents($logoUrl));
 
-    // Judul
+    $drawing = new Drawing();
+    $drawing->setName('Logo Klinik');
+    $drawing->setDescription('Logo Klinik');
+    $drawing->setPath($tempPath);
+    $drawing->setHeight(60);
+    $drawing->setCoordinates('A1');
+    $drawing->setWorksheet($sheet);
+
+    // Judul & Kop
     $sheet->mergeCells('B1:M2');
     $sheet->setCellValue('B1', 'KLINIK PRATAMA UNIMUS');
     $sheet->getStyle('B1')->getFont()->setBold(true)->setSize(16);
-    $sheet->getStyle('B1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle('B1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+    $sheet->getStyle('B1')->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+        ->setVertical(Alignment::VERTICAL_CENTER);
 
     // Alamat
     $sheet->mergeCells('B3:M3');
@@ -840,7 +925,7 @@ $drawing->setWorksheet($sheet);
 
     $sheet->getRowDimension('5')->setRowHeight(10);
 
-    // --- Header Tabel (sama seperti kode sebelumnya) ---
+    // --- Header Tabel --- //
     $sheet->mergeCells('A6:A7'); $sheet->setCellValue('A6', 'No.');
     $sheet->mergeCells('B6:B7'); $sheet->setCellValue('B6', 'Foto');
     $sheet->mergeCells('C6:C7'); $sheet->setCellValue('C6', 'Nomor Barang');
@@ -868,12 +953,12 @@ $drawing->setWorksheet($sheet);
     ];
     $sheet->getStyle('A6:N7')->applyFromArray($headerStyle);
 
-    // --- Isi Data (sama seperti kode sebelumnya) ---
+    // --- Isi Data --- //
     $row = 8;
     $no = 1;
     foreach ($data as $item) {
         $sheet->setCellValue('A' . $row, $no++);
-        $sheet->setCellValue('B' . $row, 'Tidak Ada Gambar'); // Foto bisa ditambahkan juga via MemoryDrawing jika ada URL
+        $sheet->setCellValue('B' . $row, ''); // Foto kosong
         $sheet->setCellValue('C' . $row, $item->nomor ?? 'N/A');
         $sheet->setCellValue('D' . $row, $item->nama_barang);
         $sheet->setCellValue('E' . $row, $item->kode_barang ?? '-');
@@ -887,10 +972,35 @@ $drawing->setWorksheet($sheet);
         $sheet->setCellValue('M' . $row, $item->asal_perolehan ?? '-');
         $sheet->setCellValue('N' . $row, Carbon::parse($item->tanggal_masuk)->format('Y-m-d H:i:s'));
 
+        // Border untuk data
+        $sheet->getStyle('A' . $row . ':N' . $row)->applyFromArray([
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ]);
+
         $row++;
     }
 
-    // --- Stream ke browser ---
+    // --- Auto-fit kolom (kecuali kolom B "Foto") --- //
+    foreach (range('A', 'N') as $col) {
+        if ($col == 'B') {
+            $sheet->getColumnDimension($col)->setWidth(10); // Lebar default header untuk Foto
+            continue;
+        }
+        $maxLength = 0;
+        foreach ($sheet->getRowIterator() as $row) {
+            $cell = $sheet->getCell($col . $row->getRowIndex());
+            $value = $cell->getCalculatedValue();
+            if ($value !== null) {
+                $length = mb_strlen((string)$value);
+                if ($length > $maxLength) {
+                    $maxLength = $length;
+                }
+            }
+        }
+        $sheet->getColumnDimension($col)->setWidth($maxLength + 2);
+    }
+
+    // --- Stream ke browser --- //
     $writer = new Xlsx($spreadsheet);
     $fileName = 'laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
 
@@ -901,6 +1011,7 @@ $drawing->setWorksheet($sheet);
         'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
     ]);
 }
+
 
     
     public function print()
