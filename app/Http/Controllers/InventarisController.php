@@ -20,11 +20,9 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Http;
-use App\Jobs\ExportInventarisJob;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use App\Jobs\GenerateAndUploadInventoryPdf;
-use App\Models\PdfExport;
+use App\Jobs\GenerateInventarisPdf;
+use App\Models\Report;
+
 
 class InventarisController extends Controller
 {
@@ -638,30 +636,115 @@ class InventarisController extends Controller
     //         ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
     // }
 
-    public function exportPDF(Request $request)
+    public function requestPdfExport(Request $request)
 {
-    $validated = $request->validate([
-        'tahun'           => 'nullable|date_format:Y',
-        'bulan'           => 'nullable|date_format:m',
-        'hari'            => 'nullable|date_format:d',
-        'tanggal_mulai'   => 'nullable|date',
-        'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+    // 1. Validasi input (tetap sama)
+    $request->validate([
+        'tahun'    => 'nullable|date_format:Y',
+        // ... validasi lainnya
     ]);
 
-    // 1. Buat record di database untuk melacak proses ini
-    $exportRecord = PdfExport::create([
-        'user_id' => auth()->id(), // Asumsi user sudah login
-        'file_name' => 'pending...',
-        'status' => 'pending',
+    // 2. Membuat judul dan nama file (tetap sama)
+    $titleParts = [];
+    // ... (salin logika pembuatan titleParts dari controller lama)
+    
+    $title = empty($titleParts)
+        ? 'Laporan Keseluruhan Inventaris'
+        : 'Laporan Inventaris ' . implode(', ', $titleParts);
+    
+    $fileName = 'reports/laporan-inventaris-' . // Simpan dalam folder 'reports'
+        str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+        '-' . now()->timestamp . '.pdf'; // Gunakan timestamp agar unik
+
+    // 3. Buat record laporan di database
+    $report = Report::create([
+        // 'user_id' => auth()->id(), // jika ada user
+        'title'     => $title,
+        'file_name' => $fileName,
+        'filters'   => json_encode($request->all()), // Simpan semua filter
+        'status'    => 'pending',
     ]);
 
-    // 2. Kirim job ke antrian dengan data filter dan record yang baru dibuat
-    GenerateAndUploadInventoryPdf::dispatch($validated, $exportRecord);
+    // 4. Dispatch job ke antrian
+    GenerateInventarisPdf::dispatch($report);
 
-    // 3. Beri respons cepat ke frontend (Inertia)
-    return redirect()->back()->with('success', 'Laporan Anda sedang diproses dan akan tersedia beberapa saat lagi.');
+    // 5. Redirect ke halaman daftar laporan dengan pesan sukses
+    return redirect()->route('reports.index')
+        ->with('success', 'Permintaan laporan Anda sedang diproses dan akan segera tersedia di halaman ini.');
 }
 
+public function showExportForm()
+{
+    return view('inventaris.export_form'); // Nama view bisa disesuaikan
+}
+
+
+
+    public function exportPDF(Request $request)
+    {
+        // 1. Validasi input filter (sudah benar)
+        $request->validate([
+            'tahun'    => 'nullable|date_format:Y',
+            'bulan'    => 'nullable|date_format:m',
+            'hari'     => 'nullable|date_format:d',
+            'tanggal_mulai'  => 'nullable|date',
+            'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+        ]);
+
+        // 2. Membangun query secara dinamis berdasarkan filter (sudah benar)
+        $query = Inventaris::query();
+        $titleParts = [];
+
+        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+            $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
+            $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+            $query->whereBetween('tanggal_masuk', [$request->input('tanggal_mulai'), $request->input('tanggal_selesai')]);
+            $titleParts[] = "dari {$startDate} sampai {$endDate}";
+        } else {
+            if ($request->filled('hari')) {
+                $query->whereDay('tanggal_masuk', $request->input('hari'));
+                $titleParts[] = 'Tanggal ' . $request->input('hari');
+            }
+            if ($request->filled('bulan')) {
+                $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+                $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
+            }
+            if ($request->filled('tahun')) {
+                $query->whereYear('tanggal_masuk', $request->input('tahun'));
+                $titleParts[] = 'Tahun ' . $request->input('tahun');
+            }
+        }
+
+        // 3. Membuat judul dan mengambil data (sudah benar)
+        $title = empty($titleParts)
+            ? 'Laporan Keseluruhan Inventaris'
+            : 'Laporan Inventaris ' . implode(', ', $titleParts);
+
+        $inventaris = $query->latest('tanggal_masuk')->get();
+
+        $data = [
+            'inventaris' => $inventaris,
+            'title'      => $title,
+            'date'       => date('d F Y')
+        ];
+
+        // 4. Membuat nama file yang dinamis (sudah benar)
+        $fileName = 'laporan-inventaris-' .
+            str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+            '-' . date('Ymd') . '.pdf';
+
+        // 5. Membuat PDF dan mengirimkannya untuk diunduh (bagian yang disederhanakan)
+        $pdf = Pdf::loadView('inventaris.pdf', $data);
+        
+        // Opsi krusial untuk mengizinkan dompdf mengambil gambar dari URL eksternal (Supabase)
+        $pdf->setOption('isRemoteEnabled', true);
+        
+        // Mengatur ukuran dan orientasi kertas
+        $pdf->setPaper('a4', 'landscape');
+
+        // Mengirim PDF ke browser untuk diunduh. Ini cepat dan efisien.
+        return $pdf->download($fileName);
+    }
 
 
 
@@ -687,49 +770,50 @@ class InventarisController extends Controller
     // }
 
 public function exportExcel(Request $request)
-    {
-        $export = new InventarisExport();
+{
+    $export = new InventarisExport();
 
-        // Ambil raw Excel binary
-        $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
-        $sizeInBytes = strlen($content);
-        $fileName = 'excel-laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
+    // Ambil raw Excel binary
+    $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+    $sizeInBytes = strlen($content);
+    $fileName = 'excel-laporan-inventaris-' . date('Ymd') . '-' . Str::random(6) . '.xlsx';
 
-        // Opsi: paksa download langsung
-        $forceDownload = $request->boolean('download', false);
+    // Opsi: paksa download langsung lewat query ?download=1
+    $forceDownload = $request->boolean('download', false);
 
-        // 🔹 Jika file < 4MB dan tidak dipaksa download → upload ke Supabase
-        if ($sizeInBytes < 4 * 1024 * 1024 && !$forceDownload) {
-            $response = Http::withHeaders([
-                'apikey'        => env('SUPABASE_KEY'),
-                'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-                'Content-Type'  => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ])->withBody($content, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-              ->put(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+    // 🔹 Jika file < 4MB dan tidak dipaksa download → upload ke Supabase
+    if ($sizeInBytes < 4 * 1024 * 1024 && !$forceDownload) {
+        $response = Http::withHeaders([
+            'apikey'        => env('SUPABASE_KEY'),
+            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+            'Content-Type'  => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->withBody($content, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+          ->put(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
 
-            if ($response->failed()) {
-                return response()->json([
-                    'error' => 'Gagal upload file ke Supabase',
-                    'detail' => $response->body()
-                ], 500);
-            }
-
+        if ($response->failed()) {
             return response()->json([
-                'message'  => 'File berhasil diupload ke Supabase',
-                'fileName' => $fileName,
-                'url'      => rtrim(env('SUPABASE_PUBLIC_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName,
-                'sizeMB'   => round($sizeInBytes / (1024 * 1024), 2),
-            ]);
+                'error'  => 'Gagal upload file ke Supabase',
+                'detail' => $response->body()
+            ], 500);
         }
 
-        // 🔹 File ≥ 4MB atau dipaksa download → langsung stream ke browser
-        return new StreamedResponse(function () use ($content) {
-            echo $content;
-        }, 200, [
-            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        return response()->json([
+            'message'  => 'File berhasil diupload ke Supabase',
+            'fileName' => $fileName,
+            'url'      => rtrim(env('SUPABASE_PUBLIC_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName,
+            'sizeMB'   => round($sizeInBytes / (1024 * 1024), 2),
         ]);
     }
+
+    // 🔹 File ≥ 4MB atau dipaksa download → langsung stream ke browser
+    return new StreamedResponse(function () use ($content) {
+        echo $content;
+    }, 200, [
+        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+    ]);
+}
+
     
     public function print()
     {

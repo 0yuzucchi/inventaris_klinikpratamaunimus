@@ -5,15 +5,15 @@ use App\Http\Controllers\InventarisController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PanduanController;
-use Illuminate\Support\Facades\Artisan;
+use App\Http\Controllers\ReportController;
 
-Route::post('/queue-work', function () {
-    // `--stop-when-empty` penting agar proses berhenti setelah semua job selesai
-    // Ini mencegah timeout di lingkungan serverless.
-    Artisan::call('queue:work --stop-when-empty');
-    return response()->json(['status' => 'jobs processed']);
-});
+// Route untuk menampilkan halaman form filter
+Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
 
+// Route yang akan menangani submit form (yang sudah Anda buat)
+Route::post('/inventaris/export-request', [InventarisController::class, 'requestPdfExport'])->name('inventaris.export.request');
+
+Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
 
 Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
     // Route default akan redirect ke panduan 'tambah'

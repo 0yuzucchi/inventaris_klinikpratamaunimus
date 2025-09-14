@@ -28,10 +28,13 @@
 
     },
         "crons": [
-        {
-            "path": "/api/queue-work",
-            "schedule": "* * * * *"
-        }
-    ]
+    {
+      "path": "/api/queue-worker",
+      "schedule": "* * * * *", 
+      "headers": {
+         "Authorization": "Bearer cobaajadulu"
+      }
+    }
+  ]
 
 }
