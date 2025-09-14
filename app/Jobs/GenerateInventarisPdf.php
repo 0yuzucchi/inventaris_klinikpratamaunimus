@@ -10,7 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http; // <--- PENTING: Tambahkan use statement ini
+use Illuminate\Support\Facades\Http;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 
@@ -40,7 +40,6 @@ class GenerateInventarisPdf implements ShouldQueue
             $filters = json_decode($report->filters, true) ?? [];
             $query = Inventaris::query();
 
-            // Logika filter Anda yang sudah aman
             if (!empty($filters['tanggal_mulai']) && !empty($filters['tanggal_selesai'])) {
                 $query->whereBetween('tanggal_masuk', [$filters['tanggal_mulai'], $filters['tanggal_selesai']]);
             } else {
@@ -50,6 +49,7 @@ class GenerateInventarisPdf implements ShouldQueue
             }
 
             $inventaris = $query->latest('tanggal_masuk')->get();
+
             $data = [
                 'inventaris' => $inventaris,
                 'title'      => $report->title,
@@ -58,48 +58,38 @@ class GenerateInventarisPdf implements ShouldQueue
 
             // Generate PDF
             $pdf = Pdf::loadView('inventaris.pdf', $data)
-                ->setPaper('a4', 'landscape')
-                ->setOption('isRemoteEnabled', true);
+                      ->setPaper('a4', 'landscape')
+                      ->setOption('isRemoteEnabled', true);
+
             $pdfContent = $pdf->output();
 
-            // ======================= MENGGUNAKAN HTTP CLIENT MANUAL (SESUAI PERMINTAAN) =======================
-
-            // 1. Siapkan semua variabel yang dibutuhkan dari .env dan model
-            $fileName   = $report->file_name;
-            $bucketName = env('SUPABASE_BUCKET');
+            // ======================== Upload via HTTP ke Supabase ========================
+            $supabaseUrl = env('SUPABASE_URL'); // misal https://<project-id>.supabase.co
             $supabaseKey = env('SUPABASE_KEY');
-            $supabaseUrl = env('SUPABASE_URL');
-            
-            // 2. Bangun URL untuk endpoint upload Supabase Storage API
-            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucketName}/{$fileName}";
-            
-            // 3. Lakukan panggilan HTTP POST dengan header yang benar
+            $bucket      = env('SUPABASE_BUCKET', 'inventaris-fotos');
+            $fileName    = $report->file_name; // misal: report_123.pdf
+
+            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucket}/{$fileName}";
+
             $response = Http::withHeaders([
                 'apikey'        => $supabaseKey,
                 'Authorization' => 'Bearer ' . $supabaseKey,
-                'Content-Type'  => 'application/pdf', // Header ini wajib untuk file biner
-                'x-upsert'      => 'true', // Opsi untuk menimpa file jika sudah ada
+                'Content-Type'  => 'application/pdf',
+                'x-upsert'      => 'true', // menimpa file jika sudah ada
             ])->post($uploadUrl, $pdfContent);
-            
-            // 4. Periksa responsnya secara eksplisit
-            if ($response->failed()) {
-                // Jika gagal, lemparkan error dengan pesan dari Supabase agar sangat jelas
-                throw new \Exception('GAGAL UNGGAH VIA HTTP: Status Code ' . $response->status() . ' - Pesan: ' . $response->body());
+
+            if (!in_array($response->status(), [200, 201])) {
+                throw new \Exception("Upload Supabase gagal: HTTP {$response->status()} - {$response->body()}");
             }
 
-            // 5. Jika berhasil, bangun URL publik secara manual
-            $filePath = "{$supabaseUrl}/storage/v1/object/public/{$bucketName}/{$fileName}";
-            
-            // =================================== AKHIR DARI BLOK HTTP ===================================
+            $filePath = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/{$fileName}";
 
-            // Perbarui status laporan di database menjadi selesai
             $report->update([
                 'status'    => 'completed',
                 'file_path' => $filePath,
             ]);
 
         } catch (\Exception $e) {
-            // Catat error yang terjadi, termasuk error dari HTTP
             Log::error("Gagal generate PDF untuk Report ID {$this->reportId}: " . $e->getMessage());
 
             $report->update([
@@ -107,7 +97,6 @@ class GenerateInventarisPdf implements ShouldQueue
                 'error_message' => $e->getMessage(),
             ]);
 
-            // Lemparkan kembali error agar terminal queue worker menampilkan status "FAILED"
             throw $e;
         }
     }

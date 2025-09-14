@@ -9,12 +9,11 @@ use App\Http\Controllers\ReportController;
 
 // Route untuk menampilkan halaman form filter
 // 1. Tampilkan form export (opsional)
-Route::get('/inventaris/keren', [InventarisController::class, 'showExportForm'])
-    ->name('inventaris.export.form');
+Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
+
 
 // 2. Submit form untuk membuat laporan via job queue
-Route::post('/inventaris/keren', [ReportController::class, 'requestPdfExport'])
-    ->name('inventaris.export.request'); // nama route bisa disesuaikan
+Route::post('/inventaris/export-request', [InventarisController::class, 'requestPdfExport'])->name('inventaris.export.request');
 
     Route::post('/reports/request-pdf', [ReportController::class, 'requestPdfExport'])
     ->name('reports.requestPdfExport');
