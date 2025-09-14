@@ -566,71 +566,153 @@ class InventarisController extends Controller
         return $pdf->stream($filename);
     }
     
+    // public function exportPDF(Request $request)
+    // {
+    //     $request->validate([
+    //         'tahun'    => 'nullable|date_format:Y',
+    //         'bulan'    => 'nullable|date_format:m',
+    //         'hari'     => 'nullable|date_format:d',
+    //         'tanggal_mulai'  => 'nullable|date',
+    //         'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+    //     ]);
+
+    //     $query = Inventaris::query();
+    //     $titleParts = [];
+
+    //     if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+    //         $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
+    //         $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+
+    //         $query->whereBetween('tanggal_masuk', [
+    //             $request->input('tanggal_mulai'),
+    //             $request->input('tanggal_selesai')
+    //         ]);
+    //         $titleParts[] = "dari {$startDate} sampai {$endDate}";
+    //     } else {
+    //         if ($request->filled('hari')) {
+    //             $query->whereDay('tanggal_masuk', $request->input('hari'));
+    //             $titleParts[] = 'Tanggal ' . $request->input('hari');
+    //         }
+    //         if ($request->filled('bulan')) {
+    //             $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+    //             $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
+    //         }
+    //         if ($request->filled('tahun')) {
+    //             $query->whereYear('tanggal_masuk', $request->input('tahun'));
+    //             $titleParts[] = 'Tahun ' . $request->input('tahun');
+    //         }
+    //     }
+
+    //     $title = empty($titleParts)
+    //         ? 'Laporan Keseluruhan Inventaris'
+    //         : 'Laporan Inventaris ' . implode(', ', $titleParts);
+
+    //     $inventaris = $query->latest('tanggal_masuk')->get();
+
+    //     $data = [
+    //         'inventaris' => $inventaris,
+    //         'title'      => $title,
+    //         'date'       => date('d F Y')
+    //     ];
+
+    //     // 🔹 Generate PDF langsung di memory
+    //     $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('inventaris.pdf', $data)
+    //         ->setPaper('a4', 'landscape');
+
+    //     $pdf->setOption('isRemoteEnabled', true);
+
+
+    //     $fileName = 'laporan-inventaris-' .
+    //         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+    //         '-' . date('Ymd') . '.pdf';
+
+    //     // 🔹 Serverless-friendly: langsung return stream (nggak simpan ke local)
+    //     return response($pdf->output(), 200)
+    //         ->header('Content-Type', 'application/pdf')
+    //         ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+    // }
+
     public function exportPDF(Request $request)
-    {
-        $request->validate([
-            'tahun'    => 'nullable|date_format:Y',
-            'bulan'    => 'nullable|date_format:m',
-            'hari'     => 'nullable|date_format:d',
-            'tanggal_mulai'  => 'nullable|date',
-            'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+{
+    $request->validate([
+        'tahun'    => 'nullable|date_format:Y',
+        'bulan'    => 'nullable|date_format:m',
+        'hari'     => 'nullable|date_format:d',
+        'tanggal_mulai'  => 'nullable|date',
+        'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+    ]);
+
+    $query = Inventaris::query();
+    $titleParts = [];
+
+    if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+        $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
+        $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+
+        $query->whereBetween('tanggal_masuk', [
+            $request->input('tanggal_mulai'),
+            $request->input('tanggal_selesai')
         ]);
-
-        $query = Inventaris::query();
-        $titleParts = [];
-
-        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
-            $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
-            $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
-
-            $query->whereBetween('tanggal_masuk', [
-                $request->input('tanggal_mulai'),
-                $request->input('tanggal_selesai')
-            ]);
-            $titleParts[] = "dari {$startDate} sampai {$endDate}";
-        } else {
-            if ($request->filled('hari')) {
-                $query->whereDay('tanggal_masuk', $request->input('hari'));
-                $titleParts[] = 'Tanggal ' . $request->input('hari');
-            }
-            if ($request->filled('bulan')) {
-                $query->whereMonth('tanggal_masuk', $request->input('bulan'));
-                $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
-            }
-            if ($request->filled('tahun')) {
-                $query->whereYear('tanggal_masuk', $request->input('tahun'));
-                $titleParts[] = 'Tahun ' . $request->input('tahun');
-            }
+        $titleParts[] = "dari {$startDate} sampai {$endDate}";
+    } else {
+        if ($request->filled('hari')) {
+            $query->whereDay('tanggal_masuk', $request->input('hari'));
+            $titleParts[] = 'Tanggal ' . $request->input('hari');
         }
-
-        $title = empty($titleParts)
-            ? 'Laporan Keseluruhan Inventaris'
-            : 'Laporan Inventaris ' . implode(', ', $titleParts);
-
-        $inventaris = $query->latest('tanggal_masuk')->get();
-
-        $data = [
-            'inventaris' => $inventaris,
-            'title'      => $title,
-            'date'       => date('d F Y')
-        ];
-
-        // 🔹 Generate PDF langsung di memory
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('inventaris.pdf', $data)
-            ->setPaper('a4', 'landscape');
-
-        $pdf->setOption('isRemoteEnabled', true);
-
-
-        $fileName = 'laporan-inventaris-' .
-            str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
-            '-' . date('Ymd') . '.pdf';
-
-        // 🔹 Serverless-friendly: langsung return stream (nggak simpan ke local)
-        return response($pdf->output(), 200)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+        if ($request->filled('bulan')) {
+            $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+            $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
+        }
+        if ($request->filled('tahun')) {
+            $query->whereYear('tanggal_masuk', $request->input('tahun'));
+            $titleParts[] = 'Tahun ' . $request->input('tahun');
+        }
     }
+
+    $title = empty($titleParts)
+        ? 'Laporan Keseluruhan Inventaris'
+        : 'Laporan Inventaris ' . implode(', ', $titleParts);
+
+    $inventaris = $query->latest('tanggal_masuk')->get();
+
+    $data = [
+        'inventaris' => $inventaris,
+        'title'      => $title,
+        'date'       => date('d F Y')
+    ];
+
+    // 🔹 Generate PDF di memory
+    $pdf = Pdf::loadView('inventaris.pdf', $data)
+        ->setPaper('a4', 'landscape');
+
+    $pdf->setOption('isRemoteEnabled', true);
+
+    // 🔹 Simpan file sementara di /tmp (serverless-friendly)
+    $fileName = 'laporan-inventaris-' .
+        str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+        '-' . date('Ymd') . '-' . Str::random(6) . '.pdf';
+
+    $filePath = '/tmp/' . $fileName;
+    file_put_contents($filePath, $pdf->output());
+
+    // 🔹 Upload ke Supabase Storage
+    $response = Http::withHeaders([
+        'apikey'        => env('SUPABASE_KEY'),
+        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+    ])->attach(
+        'file', file_get_contents($filePath), $fileName
+    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+    if ($response->failed()) {
+        return back()->with('error', 'Gagal upload file ke Supabase: ' . $response->body());
+    }
+
+    // 🔹 Dapatkan public URL (atau signed URL)
+    $downloadUrl = env('SUPABASE_URL') . '/storage/v1/object/public/exports/' . $fileName;
+
+    // 🔹 Redirect user ke link download
+    return redirect()->away($downloadUrl);
+}
 
     // public function exportExcel()
     // {
@@ -646,71 +728,43 @@ class InventarisController extends Controller
     //         'Content-Disposition' => 'attachment; filename="inventaris.xlsx"',
     //     ]);
     // }
-    public function exportExcel(Request $request)
-    {
-        $export = new InventarisExport();
+    public function exportCsv()
+{
+    $inventaris = Inventaris::all();
 
-        // generate Excel content ke binary string
-        $content = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+    $fileName = 'inventaris_' . time() . '.csv';
+    $handle = fopen('php://temp', 'r+');
 
-        $fileName = 'inventaris_' . time() . '.xlsx';
+    // header
+    fputcsv($handle, ['ID', 'Nama Barang', 'Jumlah']);
 
-        // === 1. Ambil daftar file lama di bucket exports/
-        $listResponse = Http::withHeaders([
-            'apikey'        => env('SUPABASE_KEY'),
-            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-            'Content-Type'  => 'application/json',
-        ])->post(env('SUPABASE_URL') . '/storage/v1/object/list/exports', [
-            'prefix' => '', // ambil semua file di folder exports/
-        ]);
-
-        if ($listResponse->ok()) {
-            $files = $listResponse->json();
-            foreach ($files as $file) {
-                if (!empty($file['name'])) {
-                    // === 2. Hapus file lama
-                    Http::withHeaders([
-                        'apikey'        => env('SUPABASE_KEY'),
-                        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-                        'Content-Type'  => 'application/json',
-                    ])->delete(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $file['name']);
-                }
-            }
-        }
-
-        // === 3. Upload file baru
-        $tmp = tmpfile();
-        fwrite($tmp, $content);
-        fseek($tmp, 0);
-
-        $uploadResponse = Http::withHeaders([
-            'apikey'        => env('SUPABASE_KEY'),
-            'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-        ])->attach(
-            'file',
-            $tmp,
-            $fileName
-        )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
-
-        fclose($tmp);
-
-        if ($uploadResponse->failed()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Upload ke Supabase gagal',
-                'error'   => $uploadResponse->body(),
-            ], 500);
-        }
-
-        // === 4. Buat link publik
-        $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
-
-        return response()->json([
-            'success'   => true,
-            'file_name' => $fileName,
-            'url'       => $publicUrl,
-        ]);
+    // isi
+    foreach ($inventaris as $item) {
+        fputcsv($handle, [$item->id, $item->nama_barang, $item->jumlah]);
     }
+
+    rewind($handle);
+    $content = stream_get_contents($handle);
+    fclose($handle);
+
+    // upload ke Supabase
+    $response = Http::withHeaders([
+        'apikey'        => env('SUPABASE_KEY'),
+        'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
+    ])->attach(
+        'file',
+        $content,
+        $fileName
+    )->post(env('SUPABASE_URL') . '/storage/v1/object/exports/' . $fileName);
+
+    if ($response->failed()) {
+        return response()->json(['error' => $response->body()], 500);
+    }
+
+    $publicUrl = rtrim(env('SUPABASE_URL'), '/') . '/storage/v1/object/public/exports/' . $fileName;
+
+    return redirect()->away($publicUrl);
+}
 
 
     public function print()
