@@ -34,6 +34,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 
 class InventarisController extends Controller
 {
+    
     public function index(): InertiaResponse
     {
         $inventaris = Inventaris::latest()->get();
@@ -883,72 +884,88 @@ public function showExportForm()
     //         'inventaris' => $inventaris,
     //     ]);
     // }
-/**
- * Menghitung jumlah baris yang dibutuhkan oleh sebuah MultiCell
- * @param float $w Lebar sel
- * @param string $txt Teks di dalamnya
- * @return int Jumlah baris
- */
-private function NbLines($w, $txt)
-{
-    // & $this->fpdf->CurrentFont['cw'] is not available directly, so we need to get it via a property
-    $cw = $this->fpdf->GetStringWidth($txt);
-    
-    if ($w == 0) {
-        $w = $this->fpdf->w - $this->fpdf->rMargin - $this->fpdf->x;
-    }
-    
-    $wmax = ($w - 2 * $this->fpdf->cMargin);
-    
-    if ($cw < $wmax) {
-        return 1;
-    }
-    
-    $char_width = $cw / strlen($txt);
-    $max_chars = floor($wmax / $char_width);
-    $lines = ceil(strlen($txt) / $max_chars);
 
-    return $lines;
-}
 protected $fpdf;
 
-    // Buat metode __construct untuk inisialisasi
     public function __construct()
     {
         // 'L' = Landscape, 'mm' = milimeter, 'A4' = ukuran kertas
         $this->fpdf = new Fpdf('L', 'mm', 'A4');
     }
 
-    // Ini adalah fungsi utama Anda
+    /**
+     * Menghitung jumlah baris yang dibutuhkan oleh sebuah MultiCell.
+     * Versi ini dijamin aman dan tidak mengakses properti terproteksi.
+     * @param float $w Lebar sel
+     * @param string $txt Teks di dalamnya
+     * @return int Jumlah baris
+     */
+    private function NbLines($w, $txt)
+    {
+        $wmax = ($w - 4); // Menggunakan nilai margin standar 2mm per sisi.
+        $s = str_replace("\r", '', (string)$txt);
+        $nb = strlen($s);
+        if ($nb > 0 && $s[$nb - 1] == "\n") {
+            $nb--;
+        }
+        $sep = -1;
+        $i = 0;
+        $j = 0;
+        $l = 0;
+        $nl = 1;
+        while ($i < $nb) {
+            $c = $s[$i];
+            if ($c == "\n") {
+                $i++;
+                $sep = -1;
+                $j = $i;
+                $l = 0;
+                $nl++;
+                continue;
+            }
+            if ($c == ' ') {
+                $sep = $i;
+            }
+            $l += $this->fpdf->GetStringWidth($c);
+            if ($l > $wmax) {
+                if ($sep == -1) {
+                    if ($i == $j) {
+                        $i++;
+                    }
+                } else {
+                    $i = $sep + 1;
+                }
+                $sep = -1;
+                $j = $i;
+                $l = 0;
+                $nl++;
+            } else {
+                $i++;
+            }
+        }
+        return $nl;
+    }
+
+    /**
+     * Fungsi utama untuk mencetak laporan.
+     */
     public function print()
     {
-        // ===================================================================
-        // 1. PERSIAPAN DATA
-        // ===================================================================
-        $inventaris = Inventaris::latest()->get();
-
-        // ===================================================================
-        // 2. MEMBANGUN DOKUMEN PDF
-        // ===================================================================
+$inventaris = Inventaris::orderBy('nomor', 'asc')->get();
 
         $this->fpdf->AddPage();
         $this->fpdf->SetFont('Arial', 'B', 16);
 
-        // --- HEADER ---
-        // Coba unduh logo
+        // --- HEADER DOKUMEN ---
         try {
             $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
             $imageContents = Http::timeout(10)->get($logoUrl)->body();
             $tempPath = tempnam(sys_get_temp_dir(), 'logo') . '.png';
             file_put_contents($tempPath, $imageContents);
-            // Parameter: path, x, y, width
             $this->fpdf->Image($tempPath, 10, 8, 25);
-            unlink($tempPath); // Hapus file temp
-        } catch (\Exception $e) {
-            // Biarkan kosong jika logo gagal diunduh
-        }
+            unlink($tempPath);
+        } catch (\Exception $e) { /* Biarkan kosong jika logo gagal */ }
         
-        // Atur posisi kursor setelah gambar
         $this->fpdf->SetX(40);
         $this->fpdf->Cell(220, 8, 'KLINIK PRATAMA UNIMUS', 0, 1, 'C');
         $this->fpdf->SetFont('Arial', '', 10);
@@ -956,13 +973,9 @@ protected $fpdf;
         $this->fpdf->Cell(220, 6, 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang', 0, 1, 'C');
         $this->fpdf->SetX(40);
         $this->fpdf->Cell(220, 6, 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id', 0, 1, 'C');
-        $this->fpdf->Ln(5); // Jarak
-        
-        // Garis pemisah
+        $this->fpdf->Ln(5);
         $this->fpdf->Line(10, 38, 287, 38);
         $this->fpdf->Ln(5);
-
-        // Judul Laporan
         $this->fpdf->SetFont('Arial', 'B', 12);
         $this->fpdf->Cell(0, 10, 'Laporan Inventaris', 0, 1, 'C');
         $this->fpdf->Ln(2);
@@ -970,49 +983,96 @@ protected $fpdf;
         // --- HEADER TABEL ---
         $this->fpdf->SetFont('Arial', 'B', 8);
         $this->fpdf->SetFillColor(242, 242, 242);
-
-        // Definisikan lebar setiap kolom (total harus sekitar 277 untuk A4 Landscape)
-        $widths = [8, 15, 25, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 20];
+        $headerText = 'Nomor';
+$nomorColWidth = $this->fpdf->GetStringWidth($headerText) + 6; // 6 mm = padding kiri/kanan
+        $widths = [8, 15, $nomorColWidth, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 20];
         $headers = ['No.', 'Foto', 'Nomor', 'Nama Barang', 'Kode', 'Spesifikasi', 'Perawatan', 'Total', 'Pakai', 'Rusak', 'Pemakaian', 'No. Ruang', 'Asal', 'Tgl Masuk'];
-
         for ($i = 0; $i < count($headers); $i++) {
-            // Parameter: lebar, tinggi, teks, border, ganti baris, align, fill
             $this->fpdf->Cell($widths[$i], 7, $headers[$i], 1, 0, 'C', true);
         }
         $this->fpdf->Ln();
 
         // --- ISI TABEL ---
         $this->fpdf->SetFont('Arial', '', 7);
-        foreach ($inventaris as $i => $item) {
-            $this->fpdf->Cell($widths[0], 6, $i + 1, 1, 0, 'C');
-            
-            // Kolom Foto (placeholder teks)
-            $fotoText = $item->foto_url ? 'Ada Gambar' : '-';
-            $this->fpdf->Cell($widths[1], 6, $fotoText, 1, 0, 'C');
+        $lineHeight = 5;
+        $imageCellHeight = 15;
+        $bottomMargin = 20; // Margin bawah standar FPDF dalam mm
 
-            $this->fpdf->Cell($widths[2], 6, $item->nomor ?? 'N/A', 1, 0);
-            $this->fpdf->Cell($widths[3], 6, $item->nama_barang ?? '-', 1, 0);
-            $this->fpdf->Cell($widths[4], 6, $item->kode_barang ?? '-', 1, 0);
-            $this->fpdf->Cell($widths[5], 6, $item->spesifikasi ?? '-', 1, 0);
-            $this->fpdf->Cell($widths[6], 6, $item->jenis_perawatan ?? '', 1, 0);
-            $this->fpdf->Cell($widths[7], 6, $item->jumlah ?? 0, 1, 0, 'C');
-            $this->fpdf->Cell($widths[8], 6, $item->jumlah_dipakai ?? 0, 1, 0, 'C');
-            $this->fpdf->Cell($widths[9], 6, $item->jumlah_rusak ?? '', 1, 0, 'C');
-            $this->fpdf->Cell($widths[10], 6, $item->tempat_pemakaian ?? '-', 1, 0);
-            $this->fpdf->Cell($widths[11], 6, $item->nomor_ruang ?? '-', 1, 0, 'C');
-            $this->fpdf->Cell($widths[12], 6, $item->asal_perolehan ?? '-', 1, 0);
-            $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
-            $this->fpdf->Cell($widths[13], 6, $tanggal_masuk, 1, 0, 'C');
-            $this->fpdf->Ln();
+        foreach ($inventaris as $i => $item) {
+            $data = [
+                $i + 1, '', $item->nomor ?? 'N/A', $item->nama_barang ?? '-',
+                $item->kode_barang ?? '-', $item->spesifikasi ?? '-', $item->jenis_perawatan ?? '',
+                $item->jumlah ?? 0, $item->jumlah_dipakai ?? 0, $item->jumlah_rusak ?? '',
+                $item->tempat_pemakaian ?? '-', $item->nomor_ruang ?? '-', $item->asal_perolehan ?? '-',
+                $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : ''
+            ];
+
+            $nb = 0;
+            for ($col = 2; $col < count($data); $col++) {
+                $nb = max($nb, $this->NbLines($widths[$col], $data[$col]));
+            }
+            $textRowHeight = $nb * $lineHeight;
+            $rowHeight = max($textRowHeight, $imageCellHeight);
+
+            // PERBAIKAN FINAL: Memeriksa page break dengan metode publik yang aman
+            if ($this->fpdf->GetY() + $rowHeight > ($this->fpdf->GetPageHeight() - $bottomMargin)) {
+                $this->fpdf->AddPage();
+                // Gambar ulang header tabel di halaman baru
+                $this->fpdf->SetFont('Arial', 'B', 8);
+                $this->fpdf->SetFillColor(242, 242, 242);
+                for ($h = 0; $h < count($headers); $h++) {
+                    $this->fpdf->Cell($widths[$h], 7, $headers[$h], 1, 0, 'C', true);
+                }
+                $this->fpdf->Ln();
+                $this->fpdf->SetFont('Arial', '', 7);
+            }
+
+            $x = $this->fpdf->GetX();
+            $y = $this->fpdf->GetY();
+            $aligns = ['C', 'C', 'C', 'L', 'L', 'L', 'L', 'C', 'C', 'C', 'L', 'C', 'L', 'C'];
+
+            for ($col = 0; $col < count($data); $col++) {
+                $this->fpdf->Rect($x, $y, $widths[$col], $rowHeight);
+                if ($col === 1) { // Kolom Foto
+                    if ($item->foto_url) {
+                        try {
+                            $imgContents = Http::timeout(5)->get($item->foto_url)->body();
+                            $imgPath = tempnam(sys_get_temp_dir(), 'inv') . '.jpg';
+                            file_put_contents($imgPath, $imgContents);
+                            $this->fpdf->Image($imgPath, $x + 1, $y + 1, $widths[$col] - 2, $rowHeight - 2);
+                            unlink($imgPath);
+                        } catch (\Exception $e) {}
+                    }
+                } else { // Kolom Teks
+    // Hitung tinggi teks MultiCell
+    $nbLines = $this->NbLines($widths[$col], $data[$col]);
+    $textHeight = $nbLines * $lineHeight;
+
+    // Hitung offset untuk vertical centering
+    $yOffset = ($rowHeight - $textHeight) / 2;
+
+    // Simpan posisi X, Y sebelum MultiCell
+    $xBefore = $this->fpdf->GetX();
+    $yBefore = $this->fpdf->GetY();
+
+    // Geser Y supaya teks di tengah
+    $this->fpdf->SetXY($xBefore, $yBefore + $yOffset);
+
+    // Cetak MultiCell
+    $this->fpdf->MultiCell($widths[$col], $lineHeight, $data[$col], 0, $aligns[$col]);
+
+    // Kembalikan posisi X,Y untuk selanjutnya
+    $this->fpdf->SetXY($xBefore + $widths[$col], $yBefore);
+}
+                $x += $widths[$col];
+                $this->fpdf->SetXY($x, $y);
+            }
+            $this->fpdf->Ln($rowHeight);
         }
 
-        // ===================================================================
-        // 3. OUTPUT PDF KE BROWSER
-        // ===================================================================
         $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
-        // 'I' untuk inline (tampil di browser), 'D' untuk download
         $this->fpdf->Output('I', $fileName);
-        exit; // Hentikan eksekusi script setelah PDF dikirim
+        exit;
     }
 
 }
