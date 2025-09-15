@@ -3,14 +3,13 @@
     "version": 2,
     "framework": null,
     "functions": {
-        "api/index.php": { "runtime": "vercel-php@0.7.1",
-            "includeFiles": "php.ini" }
+        "api/index.php": { "runtime": "vercel-php@0.7.1" }
     },
-      "rewrites": [
+         "rewrites": [
     { "source": "/(.*)", "destination": "/public/index.php" }
   ],
+
     "routes": [
-        { "src": "/build/(.*)", "dest": "/public/build/" },
         { "src": "/(.*)", "dest": "/api/index.php" }
     ],
     "public": true,
@@ -28,9 +27,7 @@
         "VIEW_COMPILED_PATH": "/tmp",
         "CACHE_DRIVER": "array",
         "LOG_CHANNEL": "stderr",
-        "SESSION_DRIVER": "cookie",
-
-        "PHPRC": "/var/task/user/php.ini"
+        "SESSION_DRIVER": "cookie"
 
     }
         
