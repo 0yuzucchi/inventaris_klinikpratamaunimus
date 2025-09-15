@@ -12,7 +12,15 @@ use App\Http\Controllers\ReportController;
 
 
 use App\Http\Controllers\InventarisExportController;
-
+Route::get('/debug-phpinfo', function () {
+    // Periksa apakah ekstensi GD dimuat, dan tampilkan semua info PHP
+    if (extension_loaded('gd')) {
+        echo '<h1>Ekstensi GD SUDAH AKTIF.</h1>';
+    } else {
+        echo '<h1>Ekstensi GD TIDAK AKTIF.</h1>';
+    }
+    phpinfo();
+});
 Route::get('/inventaris/export', [InventarisExportController::class, 'index'])
     ->name('inventaris.export.index');
 
@@ -90,4 +98,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 // Rute otentikasi
-require __DIR__.'/auth.php';
+require __DIR__.'/auth.php';  
