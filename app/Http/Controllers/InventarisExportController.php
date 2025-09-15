@@ -1,9 +1,10 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
+use App\Models\Inventaris;
 
 class InventarisExportController extends Controller
 {
@@ -12,31 +13,23 @@ class InventarisExportController extends Controller
         return inertia('Inventaris/Export');
     }
 
-    public function getPresignedUrl(Request $request)
+    public function generatePdfBase64(Request $request)
     {
-        $request->validate([
-            'fileName' => 'required|string',
+        // Ambil semua data inventaris
+        $inventaris = Inventaris::all();
+
+        // Render view inventaris/pdf.blade.php
+        $pdf = Pdf::loadView('inventaris.pdf', compact('inventaris'));
+
+        // Output PDF dalam bentuk binary
+        $pdfContent = $pdf->output();
+
+        // Encode ke base64
+        $base64 = base64_encode($pdfContent);
+
+        // Kirim balik ke frontend
+        return response()->json([
+            'file' => "data:application/pdf;base64," . $base64
         ]);
-
-        $bucket = 'inventaris-fotos';
-        $fileName = $request->fileName;
-
-        try {
-            $response = Http::withHeaders([
-                'apikey' => env('SUPABASE_KEY'),
-                'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
-            ])->post(env('SUPABASE_URL') . "/storage/v1/object/sign/{$bucket}/{$fileName}", [
-                'expiresIn' => 300, // 5 menit
-            ]);
-
-            if ($response->failed()) {
-                throw new \Exception($response->body());
-            }
-
-            return response()->json($response->json());
-        } catch (\Exception $e) {
-            Log::error('InventarisExportController::getPresignedUrl Error: ' . $e->getMessage());
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
     }
 }
