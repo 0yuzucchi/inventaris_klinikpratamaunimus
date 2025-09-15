@@ -59,22 +59,18 @@ return [
             'throw' => false,
             'report' => false,
         ],
+
         'supabase' => [
             'driver' => 's3',
             'key' => env('SUPABASE_KEY'),
             'secret' => env('SUPABASE_SECRET'),
             'region' => 'us-east-1', // Supabase tetap pakai dummy
-            'bucket' => 'inventaris-fotos',
+            'bucket' => env('SUPABASE_BUCKET'),
             'url' => env('SUPABASE_URL') . '/storage/v1/object/public',
             'endpoint' => env('SUPABASE_URL') . '/storage/v1/s3',
             'use_path_style_endpoint' => true,
-                'throw' => true, // biar error otomatis dilempar
-
+            'throw' => true, // biar error otomatis dilempar
         ],
-
-
-
-
     ],
 
     /*

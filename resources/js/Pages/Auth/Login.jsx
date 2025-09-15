@@ -67,7 +67,7 @@ export default function Login({ status }) {
                         {/* [HANYA DESKTOP] Kolom Kiri - Ilustrasi */}
                         <div className="hidden w-full items-center justify-center bg-green-50 p-12 md:flex md:w-1/2">
                              <img 
-                                src="/images/login-animation.svg" 
+                                src="https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/login-animation.svg" 
                                 alt="Clinic Illustration" 
                                 className="w-full h-auto max-w-md" 
                             />
@@ -80,7 +80,7 @@ export default function Login({ status }) {
                             {/* [HANYA MOBILE] Header besar dan terpusat */}
                             <div className="flex flex-col items-center text-center mb-10 md:hidden">
                                 <img 
-                                    src="/images/logoklinik.png" 
+                                    src="https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/logo_klinik.png" 
                                     alt="Logo Klinik Unimus" 
                                     className="h-24 w-24 mb-5"
                                 />
@@ -93,7 +93,7 @@ export default function Login({ status }) {
                             {/* [HANYA DESKTOP] Header ringkas dan rata kiri */}
                             <div className="hidden md:flex flex-col items-start mb-8">
                                 <div className="flex items-center gap-4">
-                                    <img src="/images/logoklinik.png" alt="Logo Klinik Unimus" className="h-14 w-14" />
+                                    <img src="https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/logo_klinik.png" alt="Logo Klinik Unimus" className="h-14 w-14" />
                                     <div>
                                         <h2 className="text-lg font-bold text-gray-800 leading-tight">Inventaris Klinik</h2>
                                         <h2 className="text-lg font-bold text-gray-800 leading-tight">Pratama UNIMUS</h2>
@@ -147,7 +147,7 @@ export default function Login({ status }) {
 
                             {/* --- PEMISAH DAN TOMBOL REGISTER --- */}
                             {/* [HANYA DESKTOP] Pemisah "Atau" dan Tombol Register Outline */}
-                            <div className="hidden md:block">
+                            {/* <div className="hidden md:block">
                                 <div className="flex items-center my-6">
                                     <hr className="flex-grow border-gray-300" />
                                     <span className="px-4 text-sm text-gray-500">Atau</span>
@@ -159,15 +159,15 @@ export default function Login({ status }) {
                                 >
                                     Register
                                 </Link>
-                            </div>
+                            </div> */}
 
                             {/* [HANYA MOBILE] Link Daftar di bawah */}
-                            <div className="mt-8 text-center text-sm text-gray-600 md:hidden">
+                            {/* <div className="mt-8 text-center text-sm text-gray-600 md:hidden">
                                 Belum memiliki akun?{' '}
                                 <Link href={route('register')} className="font-medium text-green-600 hover:text-green-500">
                                     Daftar sekarang
                                 </Link>
-                            </div>
+                            </div> */}
                         </div>
                     </div>
                 </div>

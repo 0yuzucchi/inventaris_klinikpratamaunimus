@@ -48,14 +48,7 @@ class Inventaris extends Model
      *
      * @var array
      */
-    //     protected $appends = [
-    //         'foto_url', // <-- TAMBAHKAN BARIS INI
-    //     ];
-
-    //     /**
-    //      * Accessor untuk mendapatkan URL foto.
-    //      * Nama fungsi ini (getFotoUrlAttribute) terhubung dengan nilai 'foto_url' di $appends.
-    //      */
+   
     public function getFotoUrlAttribute()
     {
         return $this->foto ?: null;
@@ -63,17 +56,6 @@ class Inventaris extends Model
     protected $appends = [
         'foto_url',
     ];
-
-    /**
-     * Accessor untuk foto_url (Supabase public URL).
-     */
-    // public function getFotoUrlAttribute()
-    // {
-    //     if ($this->foto && !str_starts_with($this->foto, 'http')) {
-    //         return rtrim(config('filesystems.disks.supabase.url'), '/') . '/' . ltrim($this->foto, '/');
-    //     }
-    //     return $this->foto ?: null;
-    // }
 
 
     protected function nomorPengadaanLengkap(): Attribute

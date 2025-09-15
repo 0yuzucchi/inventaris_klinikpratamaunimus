@@ -11,10 +11,7 @@ class DashboardController extends Controller
     {
         // Mengambil semua data sekali untuk efisiensi (tetap diperlukan untuk statistik lain)
         $inventaris = Inventaris::all();
-
-        // 1. Statistik Utama
-        // --- PERUBAHAN UTAMA: Menghitung jenis barang berdasarkan 'nomor' unik ---
-        // Kode lama: $totalJenisBarang = $inventaris->count();
+        
         $totalJenisBarang = Inventaris::distinct('nomor')->count();
         // ----------------------------------------------------------------------
 
