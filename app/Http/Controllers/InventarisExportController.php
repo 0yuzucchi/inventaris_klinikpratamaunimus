@@ -7,8 +7,9 @@ use Inertia\Inertia;
 class InventarisExportController extends Controller
 {
     public function index()
-    {
-return Inertia::render('Inventaris/ExportPage');
-    }
+{
+    return response()->json(['status' => 'OK Export route works']);
+}
+
 }
 
