@@ -1,21 +1,39 @@
 import React from "react";
-import axios from "axios";
+import { jsPDF } from "jspdf";
 
 export default function Export() {
-  const handleGeneratePdf = async () => {
-    try {
-      const res = await axios.post("/inventaris/generate-pdf-base64");
+  const handleGeneratePdf = () => {
+    const doc = new jsPDF();
 
-      const pdfBase64 = res.data.file;
+    // Judul
+    doc.setFontSize(16);
+    doc.text("Laporan Inventaris", 10, 10);
 
-      // Buat link download otomatis
-      const link = document.createElement("a");
-      link.href = pdfBase64;
-      link.download = "laporan-inventaris.pdf";
-      link.click();
-    } catch (err) {
-      console.error("Gagal generate PDF:", err);
-    }
+    // Contoh data inventaris (bisa diganti fetch dari API lalu map)
+    const data = [
+      { nama: "Laptop", kategori: "Elektronik", jumlah: 5 },
+      { nama: "Meja", kategori: "Furniture", jumlah: 10 },
+      { nama: "Kursi", kategori: "Furniture", jumlah: 20 },
+    ];
+
+    // Header tabel
+    doc.setFontSize(12);
+    let y = 20;
+    doc.text("Nama", 10, y);
+    doc.text("Kategori", 70, y);
+    doc.text("Jumlah", 140, y);
+
+    // Data tabel
+    y += 10;
+    data.forEach((item) => {
+      doc.text(item.nama, 10, y);
+      doc.text(item.kategori, 70, y);
+      doc.text(String(item.jumlah), 140, y);
+      y += 10;
+    });
+
+    // Simpan ke file PDF
+    doc.save("laporan-inventaris.pdf");
   };
 
   return (
