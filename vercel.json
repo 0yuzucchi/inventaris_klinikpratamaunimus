@@ -26,10 +26,7 @@
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "cookie"
 
-    },
-    "rewrites": [
-    { "source": "/(.*)", "destination": "/public/index.php" }
-  ]
+    }
         
 
 }
