@@ -28,6 +28,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Illuminate\Http\Client\Pool;
+use Codedge\Fpdf\Fpdf\Fpdf; // Pustaka FPDF inti
 
 use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 
@@ -483,20 +484,21 @@ class InventarisController extends Controller
 
 
 
-    public function generateLabel(Inventaris $inventari)
-    {
-        $data = ['inventari' => $inventari];
-        $pdf = PDF::loadView('inventaris.label', $data);
-        $customPaper = array(0, 0, 226.80, 113.40);
-        $pdf->setPaper($customPaper);
-        return $pdf->stream('label-' . $inventari->kode_barang . '.pdf');
-    }
+    // public function generateLabel(Inventaris $inventari)
+    // {
+    //     $data = ['inventari' => $inventari];
+    //     $pdf = PDF::loadView('inventaris.label', $data);
+    //     $customPaper = array(0, 0, 226.80, 113.40);
+    //     $pdf->setPaper($customPaper);
+    //     return $pdf->stream('label-' . $inventari->kode_barang . '.pdf');
+    // }
 
+    
     // public function downloadBulkLabels(Request $request)
     // {
     //     $validated = $request->validate([
-    //         'ids' => 'required|array',
-    //         'ids.*' => 'exists:inventaris,id'
+    //         'ids'   => 'required|array',
+    //         'ids.*' => 'exists:inventaris,id',
     //     ]);
 
     //     $selectedItems = Inventaris::whereIn('id', $validated['ids'])->get();
@@ -505,9 +507,19 @@ class InventarisController extends Controller
     //         return back()->with('error', 'Tidak ada data untuk dicetak.');
     //     }
 
-    //     $labelsToPrint = new Collection();
+    //     $labelsToPrint = new \Illuminate\Support\Collection();
+
     //     foreach ($selectedItems as $item) {
     //         $quantity = $item->jumlah_dipakai ?? 0;
+
+    //         // Konversi foto ke URL publik Supabase
+    //         if ($item->foto) {
+    //             $item->foto_url = "https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/{$item->foto}";
+    //         } else {
+    //             $item->foto_url = null;
+    //         }
+
+    //         // duplikasi sesuai jumlah_dipakai
     //         for ($i = 0; $i < $quantity; $i++) {
     //             $labelsToPrint->push($item);
     //         }
@@ -517,67 +529,22 @@ class InventarisController extends Controller
     //         return back()->with('error', 'Tidak ada item untuk dicetak labelnya (jumlah item nol).');
     //     }
 
-    //     $data = ['inventaris_list' => $labelsToPrint];
-    //     $pdf = Pdf::loadView('inventaris.bulk_label_pdf', $data)
+    //     $data = [
+    //         'inventaris_list' => $labelsToPrint,
+    //     ];
+
+    //     $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('inventaris.bulk_label_pdf', $data)
     //         ->setPaper([0, 0, 612, 936])
+    //         ->setOption('isRemoteEnabled', true) // penting supaya bisa load gambar dari URL
     //         ->setOption('margin-top', 0)
     //         ->setOption('margin-right', 0)
     //         ->setOption('margin-bottom', 0)
     //         ->setOption('margin-left', 0);
+
     //     $filename = 'sheet-labels-inventaris-' . now()->format('Y-m-d') . '.pdf';
+
     //     return $pdf->stream($filename);
     // }
-    public function downloadBulkLabels(Request $request)
-    {
-        $validated = $request->validate([
-            'ids'   => 'required|array',
-            'ids.*' => 'exists:inventaris,id',
-        ]);
-
-        $selectedItems = Inventaris::whereIn('id', $validated['ids'])->get();
-
-        if ($selectedItems->isEmpty()) {
-            return back()->with('error', 'Tidak ada data untuk dicetak.');
-        }
-
-        $labelsToPrint = new \Illuminate\Support\Collection();
-
-        foreach ($selectedItems as $item) {
-            $quantity = $item->jumlah_dipakai ?? 0;
-
-            // Konversi foto ke URL publik Supabase
-            if ($item->foto) {
-                $item->foto_url = "https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/{$item->foto}";
-            } else {
-                $item->foto_url = null;
-            }
-
-            // duplikasi sesuai jumlah_dipakai
-            for ($i = 0; $i < $quantity; $i++) {
-                $labelsToPrint->push($item);
-            }
-        }
-
-        if ($labelsToPrint->isEmpty()) {
-            return back()->with('error', 'Tidak ada item untuk dicetak labelnya (jumlah item nol).');
-        }
-
-        $data = [
-            'inventaris_list' => $labelsToPrint,
-        ];
-
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('inventaris.bulk_label_pdf', $data)
-            ->setPaper([0, 0, 612, 936])
-            ->setOption('isRemoteEnabled', true) // penting supaya bisa load gambar dari URL
-            ->setOption('margin-top', 0)
-            ->setOption('margin-right', 0)
-            ->setOption('margin-bottom', 0)
-            ->setOption('margin-left', 0);
-
-        $filename = 'sheet-labels-inventaris-' . now()->format('Y-m-d') . '.pdf';
-
-        return $pdf->stream($filename);
-    }
     
     // public function exportPDF(Request $request)
     // {
@@ -714,71 +681,71 @@ public function showExportForm()
 
 
 
-    public function exportPDF(Request $request)
-    {
-        // 1. Validasi input filter (sudah benar)
-        $request->validate([
-            'tahun'    => 'nullable|date_format:Y',
-            'bulan'    => 'nullable|date_format:m',
-            'hari'     => 'nullable|date_format:d',
-            'tanggal_mulai'  => 'nullable|date',
-            'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
-        ]);
+    // public function exportPDF(Request $request)
+    // {
+    //     // 1. Validasi input filter (sudah benar)
+    //     $request->validate([
+    //         'tahun'    => 'nullable|date_format:Y',
+    //         'bulan'    => 'nullable|date_format:m',
+    //         'hari'     => 'nullable|date_format:d',
+    //         'tanggal_mulai'  => 'nullable|date',
+    //         'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_mulai',
+    //     ]);
 
-        // 2. Membangun query secara dinamis berdasarkan filter (sudah benar)
-        $query = Inventaris::query();
-        $titleParts = [];
+    //     // 2. Membangun query secara dinamis berdasarkan filter (sudah benar)
+    //     $query = Inventaris::query();
+    //     $titleParts = [];
 
-        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
-            $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
-            $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
-            $query->whereBetween('tanggal_masuk', [$request->input('tanggal_mulai'), $request->input('tanggal_selesai')]);
-            $titleParts[] = "dari {$startDate} sampai {$endDate}";
-        } else {
-            if ($request->filled('hari')) {
-                $query->whereDay('tanggal_masuk', $request->input('hari'));
-                $titleParts[] = 'Tanggal ' . $request->input('hari');
-            }
-            if ($request->filled('bulan')) {
-                $query->whereMonth('tanggal_masuk', $request->input('bulan'));
-                $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
-            }
-            if ($request->filled('tahun')) {
-                $query->whereYear('tanggal_masuk', $request->input('tahun'));
-                $titleParts[] = 'Tahun ' . $request->input('tahun');
-            }
-        }
+    //     if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+    //         $startDate = Carbon::parse($request->input('tanggal_mulai'))->format('d F Y');
+    //         $endDate = Carbon::parse($request->input('tanggal_selesai'))->format('d F Y');
+    //         $query->whereBetween('tanggal_masuk', [$request->input('tanggal_mulai'), $request->input('tanggal_selesai')]);
+    //         $titleParts[] = "dari {$startDate} sampai {$endDate}";
+    //     } else {
+    //         if ($request->filled('hari')) {
+    //             $query->whereDay('tanggal_masuk', $request->input('hari'));
+    //             $titleParts[] = 'Tanggal ' . $request->input('hari');
+    //         }
+    //         if ($request->filled('bulan')) {
+    //             $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+    //             $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->format('F');
+    //         }
+    //         if ($request->filled('tahun')) {
+    //             $query->whereYear('tanggal_masuk', $request->input('tahun'));
+    //             $titleParts[] = 'Tahun ' . $request->input('tahun');
+    //         }
+    //     }
 
-        // 3. Membuat judul dan mengambil data (sudah benar)
-        $title = empty($titleParts)
-            ? 'Laporan Keseluruhan Inventaris'
-            : 'Laporan Inventaris ' . implode(', ', $titleParts);
+    //     // 3. Membuat judul dan mengambil data (sudah benar)
+    //     $title = empty($titleParts)
+    //         ? 'Laporan Keseluruhan Inventaris'
+    //         : 'Laporan Inventaris ' . implode(', ', $titleParts);
 
-        $inventaris = $query->latest('tanggal_masuk')->get();
+    //     $inventaris = $query->latest('tanggal_masuk')->get();
 
-        $data = [
-            'inventaris' => $inventaris,
-            'title'      => $title,
-            'date'       => date('d F Y')
-        ];
+    //     $data = [
+    //         'inventaris' => $inventaris,
+    //         'title'      => $title,
+    //         'date'       => date('d F Y')
+    //     ];
 
-        // 4. Membuat nama file yang dinamis (sudah benar)
-        $fileName = 'laporan-inventaris-' .
-            str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
-            '-' . date('Ymd') . '.pdf';
+    //     // 4. Membuat nama file yang dinamis (sudah benar)
+    //     $fileName = 'laporan-inventaris-' .
+    //         str_replace(' ', '-', strtolower(implode('-', $titleParts) ?: 'semua')) .
+    //         '-' . date('Ymd') . '.pdf';
 
-        // 5. Membuat PDF dan mengirimkannya untuk diunduh (bagian yang disederhanakan)
-        $pdf = Pdf::loadView('inventaris.pdf', $data);
+    //     // 5. Membuat PDF dan mengirimkannya untuk diunduh (bagian yang disederhanakan)
+    //     $pdf = Pdf::loadView('inventaris.pdf', $data);
         
-        // Opsi krusial untuk mengizinkan dompdf mengambil gambar dari URL eksternal (Supabase)
-        $pdf->setOption('isRemoteEnabled', true);
+    //     // Opsi krusial untuk mengizinkan dompdf mengambil gambar dari URL eksternal (Supabase)
+    //     $pdf->setOption('isRemoteEnabled', true);
         
-        // Mengatur ukuran dan orientasi kertas
-        $pdf->setPaper('a4', 'landscape');
+    //     // Mengatur ukuran dan orientasi kertas
+    //     $pdf->setPaper('a4', 'landscape');
 
-        // Mengirim PDF ke browser untuk diunduh. Ini cepat dan efisien.
-        return $pdf->download($fileName);
-    }
+    //     // Mengirim PDF ke browser untuk diunduh. Ini cepat dan efisien.
+    //     return $pdf->download($fileName);
+    // }
 
     public function exportExcel()
     {
@@ -917,116 +884,109 @@ public function showExportForm()
     //     ]);
     // }
 
-public function print()
-{
-    // ===================================================================
-    // 1. PERSIAPAN DATA (JAUH LEBIH SEDERHANA)
-    // ===================================================================
+protected $fpdf;
 
-    $inventaris = Inventaris::latest()->get();
-    $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
-
-    // TIDAK ADA LAGI PROSES HTTP::get() ATAU BASE64_ENCODE DI SINI.
-    // Kita akan langsung memasukkan URL ke dalam HTML.
-
-    // ===================================================================
-    // 2. KONSTRUKSI STRING HTML
-    // ===================================================================
-
-    // Langsung gunakan URL publik di dalam tag <img>
-    $logoHtml = '<img src="'.$logoUrl.'" alt="Logo Klinik">';
-
-    $html = <<<HTML
-    <!DOCTYPE html>
-    <html lang="id">
-    <head>
-        <meta charset="utf-8">
-        <title>Laporan Inventaris</title>
-        <style>
-            body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; word-wrap: break-word; }
-            th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
-            .text-center { text-align: center; }
-            .foto-container { width: 60px; height: 60px; text-align: center; }
-            .foto-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .header img { width: 75px; height: auto; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            {$logoHtml}
-            <h2>KLINIK PRATAMA UNIMUS</h2>
-            <p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
-            <p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
-            <hr style="border:1px solid #000; margin-bottom:10px;">
-            <h3 style="text-align:center;">Laporan Inventaris</h3>
-        </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>No.</th><th>Foto</th><th>Nomor Barang</th><th>Nama Barang</th><th>Kode Barang</th>
-                    <th>Spesifikasi</th><th>Jenis Perawatan</th><th>Total</th><th>Pakai</th><th>Rusak</th>
-                    <th>Pemakaian</th><th>Nomor Ruang</th><th>Asal Perolehan</th><th>Tanggal Masuk</th>
-                </tr>
-            </thead>
-            <tbody>
-    HTML;
-
-    // Looping untuk membangun setiap baris tabel
-    foreach ($inventaris as $i => $item) {
-        // Langsung gunakan $item->foto_url di dalam tag <img>
-        $fotoHtml = $item->foto_url ? '<img src="'.$item->foto_url.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
-
-        $nomor = htmlspecialchars($item->nomor ?? 'N/A');
-        $nama_barang = htmlspecialchars($item->nama_barang ?? '-');
-        $kode_barang = htmlspecialchars($item->kode_barang ?? '-');
-        $spesifikasi = htmlspecialchars($item->spesifikasi ?? '-');
-        $jenis_perawatan = htmlspecialchars($item->jenis_perawatan ?? '');
-        $jumlah_rusak = htmlspecialchars($item->jumlah_rusak ?? '');
-        $tempat_pemakaian = htmlspecialchars($item->tempat_pemakaian ?? '-');
-        $nomor_ruang = htmlspecialchars($item->nomor_ruang ?? '-');
-        $asal_perolehan = htmlspecialchars($item->asal_perolehan ?? '-');
-        $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
-
-        $html .= "<tr>
-                    <td class='text-center'>".($i+1)."</td>
-                    <td class='text-center foto-container'>{$fotoHtml}</td>
-                    <td>{$nomor}</td>
-                    <td>{$nama_barang}</td>
-                    <td>{$kode_barang}</td>
-                    <td>{$spesifikasi}</td>
-                    <td>{$jenis_perawatan}</td>
-                    <td class='text-center'>".($item->jumlah ?? 0)."</td>
-                    <td class='text-center'>".($item->jumlah_dipakai ?? 0)."</td>
-                    <td class='text-center'>{$jumlah_rusak}</td>
-                    <td>{$tempat_pemakaian}</td>
-                    <td class='text-center'>{$nomor_ruang}</td>
-                    <td>{$asal_perolehan}</td>
-                    <td class='text-center'>{$tanggal_masuk}</td>
-                </tr>";
+    // Buat metode __construct untuk inisialisasi
+    public function __construct()
+    {
+        // 'L' = Landscape, 'mm' = milimeter, 'A4' = ukuran kertas
+        $this->fpdf = new Fpdf('L', 'mm', 'A4');
     }
 
-    $html .= '</tbody></table></body></html>';
+    // Ini adalah fungsi utama Anda
+    public function print()
+    {
+        // ===================================================================
+        // 1. PERSIAPAN DATA
+        // ===================================================================
+        $inventaris = Inventaris::latest()->get();
 
-    // ===================================================================
-    // 3. PDF GENERATION & STREAMING (Tidak ada perubahan di sini)
-    // ===================================================================
+        // ===================================================================
+        // 2. MEMBANGUN DOKUMEN PDF
+        // ===================================================================
 
-    $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
-    $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
+        $this->fpdf->AddPage();
+        $this->fpdf->SetFont('Arial', 'B', 16);
 
-    return new StreamedResponse(
-        function () use ($pdf) {
-            echo $pdf->output();
-        },
-        200,
-        [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
-        ]
-    );
-}
+        // --- HEADER ---
+        // Coba unduh logo
+        try {
+            $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
+            $imageContents = Http::timeout(10)->get($logoUrl)->body();
+            $tempPath = tempnam(sys_get_temp_dir(), 'logo') . '.png';
+            file_put_contents($tempPath, $imageContents);
+            // Parameter: path, x, y, width
+            $this->fpdf->Image($tempPath, 10, 8, 25);
+            unlink($tempPath); // Hapus file temp
+        } catch (\Exception $e) {
+            // Biarkan kosong jika logo gagal diunduh
+        }
+        
+        // Atur posisi kursor setelah gambar
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 8, 'KLINIK PRATAMA UNIMUS', 0, 1, 'C');
+        $this->fpdf->SetFont('Arial', '', 10);
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang', 0, 1, 'C');
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id', 0, 1, 'C');
+        $this->fpdf->Ln(5); // Jarak
+        
+        // Garis pemisah
+        $this->fpdf->Line(10, 38, 287, 38);
+        $this->fpdf->Ln(5);
+
+        // Judul Laporan
+        $this->fpdf->SetFont('Arial', 'B', 12);
+        $this->fpdf->Cell(0, 10, 'Laporan Inventaris', 0, 1, 'C');
+        $this->fpdf->Ln(2);
+
+        // --- HEADER TABEL ---
+        $this->fpdf->SetFont('Arial', 'B', 8);
+        $this->fpdf->SetFillColor(242, 242, 242);
+
+        // Definisikan lebar setiap kolom (total harus sekitar 277 untuk A4 Landscape)
+        $widths = [8, 15, 25, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 20];
+        $headers = ['No.', 'Foto', 'Nomor', 'Nama Barang', 'Kode', 'Spesifikasi', 'Perawatan', 'Total', 'Pakai', 'Rusak', 'Pemakaian', 'No. Ruang', 'Asal', 'Tgl Masuk'];
+
+        for ($i = 0; $i < count($headers); $i++) {
+            // Parameter: lebar, tinggi, teks, border, ganti baris, align, fill
+            $this->fpdf->Cell($widths[$i], 7, $headers[$i], 1, 0, 'C', true);
+        }
+        $this->fpdf->Ln();
+
+        // --- ISI TABEL ---
+        $this->fpdf->SetFont('Arial', '', 7);
+        foreach ($inventaris as $i => $item) {
+            $this->fpdf->Cell($widths[0], 6, $i + 1, 1, 0, 'C');
+            
+            // Kolom Foto (placeholder teks)
+            $fotoText = $item->foto_url ? 'Ada Gambar' : '-';
+            $this->fpdf->Cell($widths[1], 6, $fotoText, 1, 0, 'C');
+
+            $this->fpdf->Cell($widths[2], 6, $item->nomor ?? 'N/A', 1, 0);
+            $this->fpdf->Cell($widths[3], 6, $item->nama_barang ?? '-', 1, 0);
+            $this->fpdf->Cell($widths[4], 6, $item->kode_barang ?? '-', 1, 0);
+            $this->fpdf->Cell($widths[5], 6, $item->spesifikasi ?? '-', 1, 0);
+            $this->fpdf->Cell($widths[6], 6, $item->jenis_perawatan ?? '', 1, 0);
+            $this->fpdf->Cell($widths[7], 6, $item->jumlah ?? 0, 1, 0, 'C');
+            $this->fpdf->Cell($widths[8], 6, $item->jumlah_dipakai ?? 0, 1, 0, 'C');
+            $this->fpdf->Cell($widths[9], 6, $item->jumlah_rusak ?? '', 1, 0, 'C');
+            $this->fpdf->Cell($widths[10], 6, $item->tempat_pemakaian ?? '-', 1, 0);
+            $this->fpdf->Cell($widths[11], 6, $item->nomor_ruang ?? '-', 1, 0, 'C');
+            $this->fpdf->Cell($widths[12], 6, $item->asal_perolehan ?? '-', 1, 0);
+            $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
+            $this->fpdf->Cell($widths[13], 6, $tanggal_masuk, 1, 0, 'C');
+            $this->fpdf->Ln();
+        }
+
+        // ===================================================================
+        // 3. OUTPUT PDF KE BROWSER
+        // ===================================================================
+        $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
+        // 'I' untuk inline (tampil di browser), 'D' untuk download
+        $this->fpdf->Output('I', $fileName);
+        exit; // Hentikan eksekusi script setelah PDF dikirim
+    }
 
 }
