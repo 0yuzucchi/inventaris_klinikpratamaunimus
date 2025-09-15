@@ -482,6 +482,224 @@ class InventarisController extends Controller
         }
     }
 
+    // =========================================================================
+    // == FUNGSI BARU DAN FUNGSI YANG DI-UPGRADE UNTUK LAYOUT LABEL BARU ==
+    // =========================================================================
+
+    /**
+     * Replikasi fungsi dari Blade untuk menghitung ukuran font dinamis.
+     *
+     * @param string $text Teks yang akan diukur.
+     * @param int $defaultSize Ukuran font default.
+     * @param array $thresholds Asosiasi array [panjang_karakter => ukuran_font].
+     * @return int Ukuran font yang telah dihitung.
+     */
+    protected function calculateFontSize($text, $defaultSize, $thresholds)
+    {   
+        $length = mb_strlen((string)$text, 'UTF-8');
+        krsort($thresholds);
+
+        foreach ($thresholds as $charCount => $fontSize) {
+            if ($length > $charCount) {
+                return $fontSize;
+            }
+        }
+        
+        return $defaultSize;
+    }
+
+    protected function drawLabel(Fpdf $fpdf, Inventaris $item, float $x, float $y)
+    {
+        // --- PENGATURAN AWAL & DIMENSI ---
+        $fpdf->SetFont('Arial', '', 10);
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetDrawColor(0, 0, 0);
+        $fpdf->SetLineWidth(0.2);
+
+        $labelW = 80;
+        $labelH = 40;
+        $headerH = 16;
+        $logoCellW = 20;
+        $infoCellX = $x + $logoCellW;
+        $infoCellW = $labelW - $logoCellW;
+
+        // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA ---
+        $fpdf->Rect($x, $y, $labelW, $labelH);
+        $fpdf->Line($x + $logoCellW, $y, $x + $logoCellW, $y + $headerH);
+        $fpdf->SetLineWidth(0.4);
+        $fpdf->Line($x, $y + $headerH, $x + $labelW, $y + $headerH);
+        $fpdf->SetLineWidth(0.2);
+        $fpdf->Rect($infoCellX, $y, $infoCellW, $headerH);
+        $titleBoxH = 6;
+        $fpdf->Line($infoCellX, $y + $titleBoxH, $x + $labelW, $y + $titleBoxH);
+        
+        // --- 2. ISI SEL LOGO (KIRI) ---
+        $logoDispHeight = 9;
+        $logoTextHeight = 5.5;
+        $totalLogoBlockHeight = $logoDispHeight + $logoTextHeight;
+        $logoStartY = $y + ($headerH - $totalLogoBlockHeight) / 2;
+
+        try {
+            $logoPath = public_path('images/logoklinik.png');
+            if (file_exists($logoPath)) {
+                $fpdf->Image($logoPath, $x + 6, $logoStartY, 8);
+            }
+        } catch (\Exception $e) {}
+
+        $fpdf->SetFont('Arial', 'B', 5);
+        $fpdf->SetXY($x, $logoStartY + $logoDispHeight);
+        $fpdf->MultiCell($logoCellW, 1.8, "INVENTARIS\nKLINIK PRATAMA\nUNIMUS", 0, 'C');
+
+        // --- 3. ISI SEL INFO (KANAN) ---
+        $fpdf->SetFont('Arial', 'B', 10);
+        $fpdf->SetXY($infoCellX, $y);
+        $fpdf->Cell($infoCellW, $titleBoxH, 'PENGADAAN BARANG', 0, 0, 'C');
+
+        $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? '-');
+        $unitPengguna = $item->tempat_pemakaian ?: '...';
+        
+        $yPos1 = $y + $titleBoxH + 1.5;
+        $yPos2 = $y + $titleBoxH + 5.5;
+
+        $fpdf->SetFont('Arial', '', 7);
+        $fpdf->SetXY($infoCellX + 1, $yPos1);
+        $fpdf->Cell(22, 4, 'NO. PENGADAAN:');
+        $fpdf->SetFont('Arial', 'B', 11);
+        $fpdf->SetXY($fpdf->GetX(), $yPos1);
+        $fpdf->Cell(28, 4, $nomorPengadaan);
+
+        $fpdf->SetFont('Arial', '', 7);
+        $fpdf->SetXY($infoCellX + 1, $yPos2);
+        $fpdf->Cell(22, 4, 'UNIT PENGGUNA:');
+        $fpdf->SetFont('Arial', 'B', 11);
+        $fpdf->SetXY($fpdf->GetX(), $yPos2);
+        $fpdf->Cell(28, 4, $unitPengguna);
+
+        // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI) ---
+        $bodyY = $y + $headerH;
+        
+        // Gambar Kotak Dalam untuk Body TERLEBIH DAHULU
+        $innerBoxMargin = 1.5;
+        $innerBoxY = $bodyY + $innerBoxMargin;
+        $innerBoxX = $x + $innerBoxMargin;
+        $innerBoxW = $labelW - ($innerBoxMargin * 2);
+        $innerBoxH = $labelH - $headerH - ($innerBoxMargin * 2);
+        $fpdf->Rect($innerBoxX, $innerBoxY, $innerBoxW, $innerBoxH);
+        
+        // Teks "Kelompok Barang / Alat" SEKARANG DITEMPATKAN DI DALAM KOTAK
+        $fpdf->SetFont('Arial', '', 7);
+        $fpdf->SetXY($innerBoxX + 1, $innerBoxY + 1); // Posisi relatif terhadap kotak dalam
+        $fpdf->Cell(40, 3, 'Kelompok Barang / Alat');
+        $kelompokTextHeight = 4; // Ruang vertikal yang digunakan oleh teks ini
+
+        // Ambil data dan hitung font size body
+        $namaBarang = $item->nama_barang ?? '-';
+        $fontSizeNama = $this->calculateFontSize($namaBarang, 12, [45 => 8, 30 => 10]);
+        $spesifikasi = $item->spesifikasi ?: '...';
+        $fontSizeSpek = $this->calculateFontSize($spesifikasi, 10, [50 => 7, 35 => 8]);
+
+        // Kalkulasi posisi vertikal di dalam SISA RUANG KOTAK DALAM
+        $fpdf->SetFont('Arial', 'B', $fontSizeNama);
+        $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $innerBoxW - 4 ? 8 : 4.5;
+        $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
+        $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $innerBoxW - 4 ? 7 : 4;
+        
+        $totalTextHeight = $namaBarangHeight + $spesifikasiHeight;
+        // Ruang yang tersedia adalah tinggi kotak dikurangi ruang untuk teks kelompok
+        $availableSpaceForCentering = $innerBoxH - $kelompokTextHeight; 
+        // Y awal adalah Y kotak + tinggi teks kelompok + setengah dari sisa ruang
+        $centeredTextStartY = ($innerBoxY + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
+
+        // Cetak Nama Barang
+        $fpdf->SetFont('Arial', 'B', $fontSizeNama);
+        $fpdf->SetXY($x, $centeredTextStartY);
+        $fpdf->MultiCell($labelW, 4.5, $namaBarang, 0, 'C');
+        
+        // Cetak Spesifikasi
+        $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
+        $fpdf->SetX($x);
+        $fpdf->MultiCell($labelW, 4, $spesifikasi, 0, 'C');
+    }
+
+
+
+
+    /**
+     * Menghasilkan file PDF berisi banyak label untuk diunduh.
+     */
+    public function downloadBulkLabels(Request $request)
+    {
+        // 1. Validasi
+        $validated = $request->validate([
+            'ids'   => 'required|array',
+            'ids.*' => 'exists:inventaris,id',
+        ]);
+
+        $selectedItems = Inventaris::whereIn('id', $validated['ids'])->get();
+
+        if ($selectedItems->isEmpty()) {
+            return back()->with('error', 'Tidak ada data inventaris yang dipilih untuk dicetak.');
+        }
+
+        // 2. Duplikasi data
+        $labelsToPrint = new Collection();
+        foreach ($selectedItems as $item) {
+            $quantity = $item->jumlah ?? 1;
+            for ($i = 0; $i < $quantity; $i++) {
+                $labelsToPrint->push($item);
+            }
+        }
+
+        if ($labelsToPrint->isEmpty()) {
+            return back()->with('error', 'Tidak ada label untuk dicetak (jumlah total item nol).');
+        }
+
+        // 3. Inisialisasi FPDF
+        $fpdf = new Fpdf('L', 'mm', [330, 215]);
+        $fpdf->SetMargins(5, 5, 5);
+        $fpdf->SetAutoPageBreak(false);
+        $fpdf->AddPage();
+        
+        // 4. Pengaturan Grid
+        $labelWidth = 80;
+        $labelHeight = 40;
+        $pageMargin = 5;
+        $horizontalGap = 1;
+        $verticalGap = 1;
+        $maxCols = 4;
+        $pageHeight = 215;
+        $maxRows = floor(($pageHeight - ($pageMargin * 2) + $verticalGap) / ($labelHeight + $verticalGap));
+
+        $col = 0;
+        $row = 0;
+
+        // 5. Loop untuk menggambar
+        foreach ($labelsToPrint as $item) {
+            $x = $pageMargin + ($col * ($labelWidth + $horizontalGap));
+            $y = $pageMargin + ($row * ($labelHeight + $verticalGap));
+
+            $this->drawLabel($fpdf, $item, $x, $y);
+
+            $col++;
+            if ($col >= $maxCols) {
+                $col = 0;
+                $row++;
+                if ($row >= $maxRows) {
+                    $row = 0;
+                    $fpdf->AddPage();
+                }
+            }
+        }
+
+// 6. Output PDF (DIUBAH MENJADI PREVIEW/STREAM)
+        $fileName = 'cetak-label-pengadaan-' . date('Ymd-His') . '.pdf';
+        // 'I' artinya Inline (stream) ke browser. 'D' artinya Download.
+        $fpdf->Output('I', $fileName); 
+        exit;
+    }
+
+
+
 
 
     // public function generateLabel(Inventaris $inventari)
