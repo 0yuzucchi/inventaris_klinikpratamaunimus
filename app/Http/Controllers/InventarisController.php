@@ -883,7 +883,33 @@ public function showExportForm()
     //         'inventaris' => $inventaris,
     //     ]);
     // }
+/**
+ * Menghitung jumlah baris yang dibutuhkan oleh sebuah MultiCell
+ * @param float $w Lebar sel
+ * @param string $txt Teks di dalamnya
+ * @return int Jumlah baris
+ */
+private function NbLines($w, $txt)
+{
+    // & $this->fpdf->CurrentFont['cw'] is not available directly, so we need to get it via a property
+    $cw = $this->fpdf->GetStringWidth($txt);
+    
+    if ($w == 0) {
+        $w = $this->fpdf->w - $this->fpdf->rMargin - $this->fpdf->x;
+    }
+    
+    $wmax = ($w - 2 * $this->fpdf->cMargin);
+    
+    if ($cw < $wmax) {
+        return 1;
+    }
+    
+    $char_width = $cw / strlen($txt);
+    $max_chars = floor($wmax / $char_width);
+    $lines = ceil(strlen($txt) / $max_chars);
 
+    return $lines;
+}
 protected $fpdf;
 
     // Buat metode __construct untuk inisialisasi
