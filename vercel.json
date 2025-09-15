@@ -3,14 +3,7 @@
     "version": 2,
     "framework": null,
     "functions": {
-        "api/index.php": {
-            "runtime": "vercel-php@0.7.1",
-            "php": {
-                "ini": {
-                    "extension": "gd"
-                }
-            }
-        }
+        "api/index.php": { "runtime": "vercel-php@0.7.1" }
     },
     "routes": [
         { "src": "/build/(.*)", "dest": "/public/build/" },
