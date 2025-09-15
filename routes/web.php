@@ -16,8 +16,8 @@ use App\Http\Controllers\InventarisExportController;
 Route::get('/inventaris/export', [InventarisExportController::class, 'index'])
     ->name('inventaris.export.index');
 
-    
 
+    
 
 
 // Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
