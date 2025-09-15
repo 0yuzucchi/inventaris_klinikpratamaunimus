@@ -3,8 +3,7 @@
     "version": 2,
     "framework": null,
     "functions": {
-        "api/index.php": { "runtime": "vercel-php@0.7.1",
-        "includeFiles": "php.ini" }
+        "api/index.php": { "runtime": "vercel-php@0.7.1" }
     },
     "routes": [
         { "src": "/build/(.*)", "dest": "/public/build/" },

@@ -27,6 +27,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Illuminate\Http\Client\Pool;
 
 use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 
@@ -917,142 +918,142 @@ public function showExportForm()
     // }
 
 public function print()
-    {
-        // ===================================================================
-        // 1. PERSIAPAN DATA
-        // ===================================================================
+{
+    // ===================================================================
+    // 1. PERSIAPAN DATA
+    // ===================================================================
 
-        $inventaris = Inventaris::latest()->get();
+    $inventaris = Inventaris::latest()->get();
+    $photoDataMap = []; // Akan menyimpan data base64 foto, dengan key ID inventaris
 
-        // --- Logo Klinik --- //
-        $logoBase64 = null;
-        try {
-            $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
-            // Menambahkan timeout untuk mencegah proses berhenti lama jika URL lambat
-            $logoContents = Http::timeout(10)->get($logoUrl)->body();
-            $logoBase64 = 'data:image/png;base64,' . base64_encode($logoContents);
-        } catch (\Exception $e) {
-            // Biarkan logo null jika gagal diunduh, tidak menghentikan proses
-            $logoBase64 = null;
-        }
+    // --- Unduh semua gambar secara bersamaan (KONKUREN) ---
+    // INI ADALAH BAGIAN OPTIMALISASI KUNCI
+    $responses = Http::pool(function (Pool $pool) use ($inventaris) {
+        $requests = [];
+        // Tambahkan logo sebagai salah satu request
+        $requests[] = $pool->as('logo_klinik')->get('https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png');
 
-        // --- Foto tiap inventaris --- //
-        // Proses ini bisa memakan waktu jika datanya banyak
-        $inventaris->transform(function ($item) {
+        // Tambahkan foto setiap inventaris ke dalam pool
+        foreach ($inventaris as $item) {
             if ($item->foto_url) {
-                try {
-                    $contents = Http::timeout(5)->get($item->foto_url)->body();
-                    $item->foto_base64 = 'data:image/png;base64,' . base64_encode($contents);
-                } catch (\Exception $e) {
-                    $item->foto_base64 = null;
-                }
-            } else {
-                $item->foto_base64 = null;
+                // 'as()' digunakan sebagai penanda agar kita tahu response ini milik item mana
+                $requests[] = $pool->as($item->id)->get($item->foto_url);
             }
-            return $item;
-        });
-
-        // ===================================================================
-        // 2. KONSTRUKSI STRING HTML
-        // ===================================================================
-
-        // Menggunakan sintaks Heredoc (<<<HTML) agar lebih rapi
-        $logoHtml = $logoBase64 ? '<img src="'.$logoBase64.'" alt="Logo Klinik">' : '';
-
-        $html = <<<HTML
-        <!DOCTYPE html>
-        <html lang="id">
-        <head>
-            <meta charset="utf-8">
-            <title>Laporan Inventaris</title>
-            <style>
-                body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; word-wrap: break-word; }
-                th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
-                .text-center { text-align: center; }
-                .foto-container { width: 60px; height: 60px; text-align: center; }
-                .foto-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .header img { width: 75px; height: auto; }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                {$logoHtml}
-                <h2>KLINIK PRATAMA UNIMUS</h2>
-                <p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
-                <p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
-                <hr style="border:1px solid #000; margin-bottom:10px;">
-                <h3 style="text-align:center;">Laporan Inventaris</h3>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>No.</th><th>Foto</th><th>Nomor Barang</th><th>Nama Barang</th><th>Kode Barang</th>
-                        <th>Spesifikasi</th><th>Jenis Perawatan</th><th>Total</th><th>Pakai</th><th>Rusak</th>
-                        <th>Pemakaian</th><th>Nomor Ruang</th><th>Asal Perolehan</th><th>Tanggal Masuk</th>
-                    </tr>
-                </thead>
-                <tbody>
-        HTML;
-
-        // Looping untuk membangun setiap baris tabel
-        foreach ($inventaris as $i => $item) {
-            $fotoHtml = $item->foto_base64 ? '<img src="'.$item->foto_base64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
-
-            // Menyiapkan variabel untuk memastikan data null ditampilkan dengan benar dan aman
-            $nomor = htmlspecialchars($item->nomor ?? 'N/A');
-            $nama_barang = htmlspecialchars($item->nama_barang ?? '-');
-            $kode_barang = htmlspecialchars($item->kode_barang ?? '-');
-            $spesifikasi = htmlspecialchars($item->spesifikasi ?? '-');
-            $jenis_perawatan = htmlspecialchars($item->jenis_perawatan ?? '');
-            $jumlah_rusak = htmlspecialchars($item->jumlah_rusak ?? '');
-            $tempat_pemakaian = htmlspecialchars($item->tempat_pemakaian ?? '-');
-            $nomor_ruang = htmlspecialchars($item->nomor_ruang ?? '-');
-            $asal_perolehan = htmlspecialchars($item->asal_perolehan ?? '-');
-            $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
-
-            $html .= "<tr>
-                        <td class='text-center'>".($i+1)."</td>
-                        <td class='text-center foto-container'>{$fotoHtml}</td>
-                        <td>{$nomor}</td>
-                        <td>{$nama_barang}</td>
-                        <td>{$kode_barang}</td>
-                        <td>{$spesifikasi}</td>
-                        <td>{$jenis_perawatan}</td>
-                        <td class='text-center'>".($item->jumlah ?? 0)."</td>
-                        <td class='text-center'>".($item->jumlah_dipakai ?? 0)."</td>
-                        <td class='text-center'>{$jumlah_rusak}</td>
-                        <td>{$tempat_pemakaian}</td>
-                        <td class='text-center'>{$nomor_ruang}</td>
-                        <td>{$asal_perolehan}</td>
-                        <td class='text-center'>{$tanggal_masuk}</td>
-                    </tr>";
         }
+        return $requests;
+    });
 
-        $html .= '</tbody></table></body></html>';
-
-        // ===================================================================
-        // 3. PDF GENERATION & STREAMING
-        // ===================================================================
-
-        // Membuat objek PDF dari string HTML
-        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
-        $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
-
-        // Menggunakan StreamedResponse untuk mengirimkan file
-        return new StreamedResponse(
-            function () use ($pdf) {
-                // `echo` akan mengirimkan output langsung ke browser
-                echo $pdf->output();
-            },
-            200, // Kode status HTTP OK
-            [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
-            ]
-        );
+    // --- Proses hasil unduhan yang sudah selesai ---
+    // Proses ini sangat cepat karena tidak ada lagi waktu tunggu jaringan
+    $logoBase64 = null;
+    if (isset($responses['logo_klinik']) && $responses['logo_klinik']->successful()) {
+        $logoBase64 = 'data:image/png;base64,' . base64_encode($responses['logo_klinik']->body());
     }
+
+    foreach ($inventaris as $item) {
+        if ($item->foto_url && isset($responses[$item->id]) && $responses[$item->id]->successful()) {
+            $photoDataMap[$item->id] = 'data:image/png;base64,' . base64_encode($responses[$item->id]->body());
+        }
+    }
+
+    // ===================================================================
+    // 2. KONSTRUKSI STRING HTML (Tidak ada perubahan di sini)
+    // ===================================================================
+
+    $logoHtml = $logoBase64 ? '<img src="'.$logoBase64.'" alt="Logo Klinik">' : '';
+
+    $html = <<<HTML
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="utf-8">
+        <title>Laporan Inventaris</title>
+        <style>
+            body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; word-wrap: break-word; }
+            th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+            .text-center { text-align: center; }
+            .foto-container { width: 60px; height: 60px; text-align: center; }
+            .foto-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+            .header { text-align: center; margin-bottom: 20px; }
+            .header img { width: 75px; height: auto; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            {$logoHtml}
+            <h2>KLINIK PRATAMA UNIMUS</h2>
+            <p>Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang</p>
+            <p>Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id</p>
+            <hr style="border:1px solid #000; margin-bottom:10px;">
+            <h3 style="text-align:center;">Laporan Inventaris</h3>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>No.</th><th>Foto</th><th>Nomor Barang</th><th>Nama Barang</th><th>Kode Barang</th>
+                    <th>Spesifikasi</th><th>Jenis Perawatan</th><th>Total</th><th>Pakai</th><th>Rusak</th>
+                    <th>Pemakaian</th><th>Nomor Ruang</th><th>Asal Perolehan</th><th>Tanggal Masuk</th>
+                </tr>
+            </thead>
+            <tbody>
+    HTML;
+
+    // Looping untuk membangun setiap baris tabel
+    foreach ($inventaris as $i => $item) {
+        // Ambil data base64 dari map yang sudah kita siapkan
+        $fotoBase64 = $photoDataMap[$item->id] ?? null;
+        $fotoHtml = $fotoBase64 ? '<img src="'.$fotoBase64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
+
+        $nomor = htmlspecialchars($item->nomor ?? 'N/A');
+        $nama_barang = htmlspecialchars($item->nama_barang ?? '-');
+        $kode_barang = htmlspecialchars($item->kode_barang ?? '-');
+        $spesifikasi = htmlspecialchars($item->spesifikasi ?? '-');
+        $jenis_perawatan = htmlspecialchars($item->jenis_perawatan ?? '');
+        $jumlah_rusak = htmlspecialchars($item->jumlah_rusak ?? '');
+        $tempat_pemakaian = htmlspecialchars($item->tempat_pemakaian ?? '-');
+        $nomor_ruang = htmlspecialchars($item->nomor_ruang ?? '-');
+        $asal_perolehan = htmlspecialchars($item->asal_perolehan ?? '-');
+        $tanggal_masuk = $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : '';
+
+        $html .= "<tr>
+                    <td class='text-center'>".($i+1)."</td>
+                    <td class='text-center foto-container'>{$fotoHtml}</td>
+                    <td>{$nomor}</td>
+                    <td>{$nama_barang}</td>
+                    <td>{$kode_barang}</td>
+                    <td>{$spesifikasi}</td>
+                    <td>{$jenis_perawatan}</td>
+                    <td class='text-center'>".($item->jumlah ?? 0)."</td>
+                    <td class='text-center'>".($item->jumlah_dipakai ?? 0)."</td>
+                    <td class='text-center'>{$jumlah_rusak}</td>
+                    <td>{$tempat_pemakaian}</td>
+                    <td class='text-center'>{$nomor_ruang}</td>
+                    <td>{$asal_perolehan}</td>
+                    <td class='text-center'>{$tanggal_masuk}</td>
+                </tr>";
+    }
+
+    $html .= '</tbody></table></body></html>';
+
+    // ===================================================================
+    // 3. PDF GENERATION & STREAMING (Tidak ada perubahan di sini)
+    // ===================================================================
+
+    $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+    $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
+
+    return new StreamedResponse(
+        function () use ($pdf) {
+            echo $pdf->output();
+        },
+        200,
+        [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+        ]
+    );
+}
 
 }

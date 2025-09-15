@@ -16,16 +16,6 @@ use App\Http\Controllers\InventarisExportController;
 Route::get('/inventaris/export', [InventarisExportController::class, 'index'])
     ->name('inventaris.export.index');
 
-Route::get('/debug-phpinfo', function () {
-    // Periksa apakah ekstensi GD dimuat, dan tampilkan semua info PHP
-    if (extension_loaded('gd')) {
-        echo '<h1>Ekstensi GD SUDAH AKTIF.</h1>';
-    } else {
-        echo '<h1>Ekstensi GD TIDAK AKTIF.</h1>';
-    }
-    phpinfo();
-});
-
 Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
     // Route default akan redirect ke panduan 'tambah'
     Route::get('/', function () {
