@@ -36,6 +36,8 @@ class InventarisController extends Controller
     {
         $inventaris = Inventaris::latest()->get();
 
+        
+
         $grouped = $inventaris->groupBy('nama_barang');
 
         $inventarisGrouped = $grouped->map(function ($items, $nama_barang) {
