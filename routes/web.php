@@ -25,23 +25,6 @@ Route::get('/debug-phpinfo', function () {
     }
     phpinfo();
 });
-    
-
-
-// Route::get('/inventaris/export', [InventarisController::class, 'showExportForm'])->name('inventaris.export.form');
-
-
-// 2. Submit form untuk membuat laporan via job queue
-Route::post('/inventaris/export-request', [InventarisController::class, 'requestPdfExport'])->name('inventaris.export.request');
-
-    Route::post('/reports/request-pdf', [ReportController::class, 'requestPdfExport'])
-    ->name('reports.requestPdfExport');
-
-// 3. Halaman daftar laporan
-Route::prefix('reports')->group(function () {
-    Route::get('/', [ReportController::class, 'index'])->name('reports.index');
-});
-
 
 Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
     // Route default akan redirect ke panduan 'tambah'
