@@ -10,26 +10,17 @@ class InventarisExportController extends Controller
 {
     public function index()
     {
+        // halaman export (pakai inertia)
         return inertia('Inventaris/Export');
     }
 
-    public function generatePdfBase64(Request $request)
+    public function generatePdf(Request $request)
     {
-        // Ambil semua data inventaris
         $inventaris = Inventaris::all();
 
-        // Render view inventaris/pdf.blade.php
         $pdf = Pdf::loadView('inventaris.pdf', compact('inventaris'));
 
-        // Output PDF dalam bentuk binary
-        $pdfContent = $pdf->output();
-
-        // Encode ke base64
-        $base64 = base64_encode($pdfContent);
-
-        // Kirim balik ke frontend
-        return response()->json([
-            'file' => "data:application/pdf;base64," . $base64
-        ]);
+        // langsung download file ke browser
+        return $pdf->download('laporan-inventaris.pdf');
     }
 }
