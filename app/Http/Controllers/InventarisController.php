@@ -920,47 +920,21 @@ public function showExportForm()
 public function print()
 {
     // ===================================================================
-    // 1. PERSIAPAN DATA
+    // 1. PERSIAPAN DATA (JAUH LEBIH SEDERHANA)
     // ===================================================================
 
     $inventaris = Inventaris::latest()->get();
-    $photoDataMap = []; // Akan menyimpan data base64 foto, dengan key ID inventaris
+    $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
 
-    // --- Unduh semua gambar secara bersamaan (KONKUREN) ---
-    // INI ADALAH BAGIAN OPTIMALISASI KUNCI
-    $responses = Http::pool(function (Pool $pool) use ($inventaris) {
-        $requests = [];
-        // Tambahkan logo sebagai salah satu request
-        $requests[] = $pool->as('logo_klinik')->get('https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png');
-
-        // Tambahkan foto setiap inventaris ke dalam pool
-        foreach ($inventaris as $item) {
-            if ($item->foto_url) {
-                // 'as()' digunakan sebagai penanda agar kita tahu response ini milik item mana
-                $requests[] = $pool->as($item->id)->get($item->foto_url);
-            }
-        }
-        return $requests;
-    });
-
-    // --- Proses hasil unduhan yang sudah selesai ---
-    // Proses ini sangat cepat karena tidak ada lagi waktu tunggu jaringan
-    $logoBase64 = null;
-    if (isset($responses['logo_klinik']) && $responses['logo_klinik']->successful()) {
-        $logoBase64 = 'data:image/png;base64,' . base64_encode($responses['logo_klinik']->body());
-    }
-
-    foreach ($inventaris as $item) {
-        if ($item->foto_url && isset($responses[$item->id]) && $responses[$item->id]->successful()) {
-            $photoDataMap[$item->id] = 'data:image/png;base64,' . base64_encode($responses[$item->id]->body());
-        }
-    }
+    // TIDAK ADA LAGI PROSES HTTP::get() ATAU BASE64_ENCODE DI SINI.
+    // Kita akan langsung memasukkan URL ke dalam HTML.
 
     // ===================================================================
-    // 2. KONSTRUKSI STRING HTML (Tidak ada perubahan di sini)
+    // 2. KONSTRUKSI STRING HTML
     // ===================================================================
 
-    $logoHtml = $logoBase64 ? '<img src="'.$logoBase64.'" alt="Logo Klinik">' : '';
+    // Langsung gunakan URL publik di dalam tag <img>
+    $logoHtml = '<img src="'.$logoUrl.'" alt="Logo Klinik">';
 
     $html = <<<HTML
     <!DOCTYPE html>
@@ -1002,9 +976,8 @@ public function print()
 
     // Looping untuk membangun setiap baris tabel
     foreach ($inventaris as $i => $item) {
-        // Ambil data base64 dari map yang sudah kita siapkan
-        $fotoBase64 = $photoDataMap[$item->id] ?? null;
-        $fotoHtml = $fotoBase64 ? '<img src="'.$fotoBase64.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
+        // Langsung gunakan $item->foto_url di dalam tag <img>
+        $fotoHtml = $item->foto_url ? '<img src="'.$item->foto_url.'" alt="'.$item->nama_barang.'">' : 'Tidak Ada Gambar';
 
         $nomor = htmlspecialchars($item->nomor ?? 'N/A');
         $nama_barang = htmlspecialchars($item->nama_barang ?? '-');
