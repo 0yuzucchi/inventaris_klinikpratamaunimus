@@ -27,7 +27,6 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Illuminate\Http\Client\Pool;
 use Codedge\Fpdf\Fpdf\Fpdf; // Pustaka FPDF inti
 
 use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
@@ -1072,6 +1071,124 @@ $nomorColWidth = $this->fpdf->GetStringWidth($headerText) + 6; // 6 mm = padding
 
         $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
         $this->fpdf->Output('I', $fileName);
+        exit;
+    }
+
+    /**
+     * Membuat laporan PDF inventaris untuk diunduh langsung.
+     * Logikanya identik dengan print(), hanya outputnya diubah menjadi download.
+     */
+    public function exportPDF()
+    {
+        $inventaris = Inventaris::orderBy('nomor', 'asc')->get();
+
+        $this->fpdf->AddPage();
+        $this->fpdf->SetFont('Arial', 'B', 16);
+
+        // --- HEADER DOKUMEN ---
+        try {
+            $logoUrl = 'https://tnrkvhyahgvlvepjccvq.supabase.co/storage/v1/object/public/itemImages/logo_klinik.png';
+            $imageContents = Http::timeout(10)->get($logoUrl)->body();
+            $tempPath = tempnam(sys_get_temp_dir(), 'logo') . '.png';
+            file_put_contents($tempPath, $imageContents);
+            $this->fpdf->Image($tempPath, 10, 8, 25);
+            unlink($tempPath);
+        } catch (\Exception $e) { /* Biarkan kosong jika logo gagal */ }
+        
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 8, 'KLINIK PRATAMA UNIMUS', 0, 1, 'C');
+        $this->fpdf->SetFont('Arial', '', 10);
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang', 0, 1, 'C');
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id', 0, 1, 'C');
+        $this->fpdf->Ln(5);
+        $this->fpdf->Line(10, 38, 287, 38);
+        $this->fpdf->Ln(5);
+        $this->fpdf->SetFont('Arial', 'B', 12);
+        $this->fpdf->Cell(0, 10, 'Laporan Inventaris', 0, 1, 'C');
+        $this->fpdf->Ln(2);
+
+        // --- HEADER TABEL ---
+        $this->fpdf->SetFont('Arial', 'B', 8);
+        $this->fpdf->SetFillColor(242, 242, 242);
+        $headerText = 'Nomor';
+        $nomorColWidth = $this->fpdf->GetStringWidth($headerText) + 6; // 6 mm = padding kiri/kanan
+        $widths = [8, 15, $nomorColWidth, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 20];
+        $headers = ['No.', 'Foto', 'Nomor', 'Nama Barang', 'Kode', 'Spesifikasi', 'Perawatan', 'Total', 'Pakai', 'Rusak', 'Pemakaian', 'No. Ruang', 'Asal', 'Tgl Masuk'];
+        for ($i = 0; $i < count($headers); $i++) {
+            $this->fpdf->Cell($widths[$i], 7, $headers[$i], 1, 0, 'C', true);
+        }
+        $this->fpdf->Ln();
+
+        // --- ISI TABEL ---
+        $this->fpdf->SetFont('Arial', '', 7);
+        $lineHeight = 5;
+        $imageCellHeight = 15;
+        $bottomMargin = 20; // Margin bawah standar FPDF dalam mm
+
+        foreach ($inventaris as $i => $item) {
+            $data = [
+                $i + 1, '', $item->nomor ?? 'N/A', $item->nama_barang ?? '-',
+                $item->kode_barang ?? '-', $item->spesifikasi ?? '-', $item->jenis_perawatan ?? '',
+                $item->jumlah ?? 0, $item->jumlah_dipakai ?? 0, $item->jumlah_rusak ?? '',
+                $item->tempat_pemakaian ?? '-', $item->nomor_ruang ?? '-', $item->asal_perolehan ?? '-',
+                $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : ''
+            ];
+
+            $nb = 0;
+            for ($col = 2; $col < count($data); $col++) {
+                $nb = max($nb, $this->NbLines($widths[$col], $data[$col]));
+            }
+            $textRowHeight = $nb * $lineHeight;
+            $rowHeight = max($textRowHeight, $imageCellHeight);
+
+            if ($this->fpdf->GetY() + $rowHeight > ($this->fpdf->GetPageHeight() - $bottomMargin)) {
+                $this->fpdf->AddPage();
+                $this->fpdf->SetFont('Arial', 'B', 8);
+                $this->fpdf->SetFillColor(242, 242, 242);
+                for ($h = 0; $h < count($headers); $h++) {
+                    $this->fpdf->Cell($widths[$h], 7, $headers[$h], 1, 0, 'C', true);
+                }
+                $this->fpdf->Ln();
+                $this->fpdf->SetFont('Arial', '', 7);
+            }
+
+            $x = $this->fpdf->GetX();
+            $y = $this->fpdf->GetY();
+            $aligns = ['C', 'C', 'C', 'L', 'L', 'L', 'L', 'C', 'C', 'C', 'L', 'C', 'L', 'C'];
+
+            for ($col = 0; $col < count($data); $col++) {
+                $this->fpdf->Rect($x, $y, $widths[$col], $rowHeight);
+                if ($col === 1) { // Kolom Foto
+                    if ($item->foto_url) {
+                        try {
+                            $imgContents = Http::timeout(5)->get($item->foto_url)->body();
+                            $imgPath = tempnam(sys_get_temp_dir(), 'inv') . '.jpg';
+                            file_put_contents($imgPath, $imgContents);
+                            $this->fpdf->Image($imgPath, $x + 1, $y + 1, $widths[$col] - 2, $rowHeight - 2);
+                            unlink($imgPath);
+                        } catch (\Exception $e) {}
+                    }
+                } else { // Kolom Teks
+                    $nbLines = $this->NbLines($widths[$col], $data[$col]);
+                    $textHeight = $nbLines * $lineHeight;
+                    $yOffset = ($rowHeight - $textHeight) / 2;
+                    $xBefore = $this->fpdf->GetX();
+                    $yBefore = $this->fpdf->GetY();
+                    $this->fpdf->SetXY($xBefore, $yBefore + $yOffset);
+                    $this->fpdf->MultiCell($widths[$col], $lineHeight, $data[$col], 0, $aligns[$col]);
+                    $this->fpdf->SetXY($xBefore + $widths[$col], $yBefore);
+                }
+                $x += $widths[$col];
+                $this->fpdf->SetXY($x, $y);
+            }
+            $this->fpdf->Ln($rowHeight);
+        }
+
+        $fileName = 'laporan-inventaris-'.date('Ymd').'.pdf';
+        // 'D' berarti 'Download'
+        $this->fpdf->Output('D', $fileName); 
         exit;
     }
 
