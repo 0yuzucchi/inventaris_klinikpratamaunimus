@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Transition } from '@headlessui/react';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/solid';
@@ -12,29 +12,42 @@ export default function Notification() {
         type: 'success',
     });
 
+    // Ref untuk mencegah notifikasi yang sama muncul berulang kali
+    const lastFlashMessage = useRef(null);
+    // Ref untuk elemen notifikasi agar bisa ditutup saat klik di luar
+    const notificationRef = useRef(null);
+
     useEffect(() => {
         const messageText = flash.success || flash.error;
         const messageType = flash.success ? 'success' : 'error';
 
-        if (messageText) {
-            let line1 = 'Sukses!';
-            let line2 = messageText;
+        // Hanya proses jika ada pesan baru dan berbeda dari yang terakhir diproses
+        if (messageText && messageText !== lastFlashMessage.current) {
+            let line1 = '';
+            let line2 = '';
 
-            if (messageText.includes('ditambahkan')) {
-                line1 = 'Data Telah';
-                line2 = 'Berhasil Ditambahkan';
-            } else if (messageText.includes('diperbarui')) {
-                line1 = 'Data Telah';
-                line2 = 'Berhasil Diperbarui';
-            } else if (messageText.includes('dihapus')) {
-                line1 = 'Data Telah';
-                line2 = 'Berhasil Dihapus';
-            } else if (messageText.includes('diduplikasi')) {
-                line1 = 'Data Telah';
-                line2 = 'Berhasil Diduplikasi';
-            } else if (messageType === 'error') {
+            // --- PERBAIKAN UTAMA: Cek tipe error TERLEBIH DAHULU ---
+            if (messageType === 'error') {
                 line1 = 'Terjadi Kesalahan';
+                line2 = messageText; // Tampilkan pesan error apa adanya dari backend
+            } else {
+                // Jika bukan error, baru kita proses sebagai pesan sukses
+                line1 = 'Sukses!';
                 line2 = messageText;
+
+                if (messageText.includes('ditambahkan')) {
+                    line1 = 'Data Telah';
+                    line2 = 'Berhasil Ditambahkan';
+                } else if (messageText.includes('diperbarui')) {
+                    line1 = 'Data Telah';
+                    line2 = 'Berhasil Diperbarui';
+                } else if (messageText.includes('dihapus')) {
+                    line1 = 'Data Telah';
+                    line2 = 'Berhasil Dihapus';
+                } else if (messageText.includes('diduplikasi')) {
+                    line1 = 'Data Telah';
+                    line2 = 'Berhasil Diduplikasi';
+                }
             }
 
             setNotification({
@@ -42,15 +55,33 @@ export default function Notification() {
                 type: messageType,
             });
             setVisible(true);
+            lastFlashMessage.current = messageText;
 
             const timer = setTimeout(() => {
                 setVisible(false);
-            }, 3000); 
+                lastFlashMessage.current = null;
+            }, 3000);
 
             return () => clearTimeout(timer);
         }
-
     }, [flash]);
+
+    // Fungsi untuk menutup notifikasi saat klik di luar
+    const handleClickOutside = (event) => {
+        if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+            setVisible(false);
+            lastFlashMessage.current = null;
+        }
+    };
+
+    useEffect(() => {
+        if (visible) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [visible]);
 
     if (!visible) {
         return null;
@@ -69,19 +100,19 @@ export default function Notification() {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
             >
-                {/* --- PERUBAHAN UTAMA UNTUK LIGHT & DARK MODE --- */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl p-8 flex flex-col items-center gap-5 text-center max-w-xs w-full border border-slate-200 dark:border-slate-700">
-                    
+                <div 
+                    ref={notificationRef}
+                    className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl p-8 flex flex-col items-center gap-5 text-center max-w-xs w-full border border-slate-200 dark:border-slate-700"
+                >
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white leading-tight">
                         {notification.message.line1} <br /> {notification.message.line2}
                     </h2>
 
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isSuccess ? 'bg-green-500' : 'bg-red-500'}`}>
                         {isSuccess ? (
-                            // Ikon checkmark gelap agar kontras dengan latar hijau
-                            <CheckIcon className="w-10 h-10 text-green-900" />
+                            <CheckIcon className="w-10 h-10 text-white" />
                         ) : (
-                            <XMarkIcon className="w-10 h-10 text-red-900" />
+                            <XMarkIcon className="w-10 h-10 text-white" />
                         )}
                     </div>
                 </div>

@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Head, Link, useForm } from '@inertiajs/react';
+// --- PERBAIKAN: Impor usePage untuk mengakses flash props ---
+import { Head, Link, useForm, usePage } from '@inertiajs/react'; 
 import { route } from 'ziggy-js';
-import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon, ChevronDownIcon, CheckIcon, TrashIcon } from '@heroicons/react/24/solid';
+// --- PERBAIKAN: Impor ikon tambahan untuk notifikasi error ---
+import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon, ChevronDownIcon, CheckIcon, TrashIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Transition } from '@headlessui/react';
 
 
@@ -236,9 +238,39 @@ const SuccessModal = ({ show, message }) => {
     );
 };
 
+// --- PENAMBAHAN BARU: Komponen Notifikasi Error ---
+const ErrorNotification = ({ message, onDismiss }) => {
+    if (!message) return null;
+
+    return (
+        <div className="fixed top-8 right-8 z-50 max-w-sm w-full">
+            <div className="bg-red-500/95 backdrop-blur-sm text-white rounded-lg shadow-2xl p-4 flex items-start gap-4">
+                <div className="flex-shrink-0">
+                    <XCircleIcon className="w-6 h-6" />
+                </div>
+                <div className="flex-grow">
+                    <h3 className="font-bold">Gagal Menyimpan!</h3>
+                    <p className="text-sm mt-1">{message}</p>
+                </div>
+                <div className="flex-shrink-0">
+                    <button onClick={onDismiss} className="p-1 rounded-full hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-white">
+                        <XMarkIcon className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- KOMPONEN UTAMA FORM ---
 export default function Form({ inventari, auth, ruangList = [], namaBarangList = [] }) {
     
+    // --- PERBAIKAN: Dapatkan `flash` props menggunakan usePage() ---
+    const { flash } = usePage().props;
+
+    // --- PENAMBAHAN BARU: State untuk mengelola pesan error dari flash ---
+    const [flashError, setFlashError] = useState(null);
+
     const nextAvailableRuang = useMemo(() => {
         if (inventari) { return null; }
         const usedNumbers = new Set(ruangList.map(r => parseInt(r.nomor_ruang, 10)).filter(n => !isNaN(n)));
@@ -247,7 +279,7 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
         return String(candidate);
     }, [ruangList, inventari]);
 
-    const { data, setData, post, errors, processing, recentlySuccessful } = useForm({
+    const { data, setData, post, errors, processing, recentlySuccessful, reset } = useForm({
         nama_barang: inventari?.nama_barang || '',
         kode_barang: inventari?.kode_barang || '',
         tempat_pemakaian: inventari ? (inventari.tempat_pemakaian || '') : 'R.',
@@ -256,7 +288,6 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
         tanggal_masuk: inventari?.tanggal_masuk ? new Date(inventari.tanggal_masuk).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         asal_perolehan: inventari?.asal_perolehan || '',
         spesifikasi: inventari?.spesifikasi || '',
-        // --- PENAMBAHAN BARU: Menambahkan 'jenis_perawatan' ke state form ---
         jenis_perawatan: inventari?.jenis_perawatan || '',
         jumlah_dipakai: inventari?.jumlah_dipakai ?? 0,
         jumlah_rusak: inventari?.jumlah_rusak ?? 0,
@@ -297,10 +328,22 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
     }, [data.tempat_pemakaian, data.nomor_ruang, ruangList, inventari]);
 
     useEffect(() => {
+        // --- PERBAIKAN: Logika untuk menampilkan modal sukses atau notifikasi error ---
         if (recentlySuccessful) {
-            setShowSuccessModal(true);
+            if (flash.success) {
+                setShowSuccessModal(true);
+                // Reset form jika operasi sukses
+                if (!inventari) { // Hanya reset untuk form tambah baru
+                   reset();
+                }
+            } else if (flash.error) {
+                setFlashError(flash.error);
+                // Sembunyikan notifikasi setelah beberapa detik
+                const timer = setTimeout(() => setFlashError(null), 5000);
+                return () => clearTimeout(timer);
+            }
         }
-    }, [recentlySuccessful]);
+    }, [recentlySuccessful, flash]);
 
     const kodeBarangOptions = useMemo(() => [
         { kode: '01-EL', keterangan: 'ELEKTRIKAL' }, { kode: '02-UM', keterangan: 'UMUM' },
@@ -379,12 +422,19 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
 
     const submit = (e) => {
         e.preventDefault();
+        
+        // --- PERBAIKAN: Bersihkan flash error sebelumnya sebelum submit baru ---
+        setFlashError(null);
+
         if (Object.keys(validationErrors).length > 0) {
-            alert('Harap perbaiki error pada Tempat Pemakaian atau Nomor Ruang sebelum menyimpan.');
-            return;
+            setFlashError('Harap perbaiki error pada Tempat Pemakaian atau Nomor Ruang sebelum menyimpan.');
+            // Sembunyikan notifikasi setelah beberapa detik
+            const timer = setTimeout(() => setFlashError(null), 5000);
+            return () => clearTimeout(timer);
         }
+        
         const url = inventari
-            ? route('inventaris.update', { inventari: inventari.id })
+            ? route('inventaris.update', { id: inventari.id })
             : route('inventaris.store');
 
         post(url, {
@@ -405,9 +455,15 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
         ? { line1: 'Data Telah', line2: 'Berhasil Diperbarui' } 
         : { line1: 'Data Telah', line2: 'Berhasil Ditambahkan' };
 
+    // --- PERBAIKAN: Hitung jumlah total error dari Inertia dan validasi kustom ---
+    const hasErrors = Object.keys(errors).length > 0 || flashError;
+
     return (
         <>
             <Head title={title} />
+            
+            {/* --- PENAMBAHAN BARU: Panggil komponen notifikasi --- */}
+            <ErrorNotification message={flashError} onDismiss={() => setFlashError(null)} />
             
             <SuccessModal show={showSuccessModal} message={successMessage} />
 
@@ -423,6 +479,13 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                     <form onSubmit={submit} className="bg-white dark:bg-slate-800 rounded-xl shadow-lg" encType="multipart/form-data">
                         <div className="p-6 sm:p-8">
                             <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">{title}</h1>
+                            {/* --- PENAMBAHAN BARU: Pesan error validasi inline --- */}
+                            {hasErrors && (
+                                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg text-sm text-red-700 dark:text-red-300">
+                                    <p className="font-semibold">Terdapat kesalahan pada input Anda.</p>
+                                    <p className="mt-1">Silakan periksa kembali semua kolom yang ditandai merah.</p>
+                                </div>
+                            )}
                             <hr className="my-6 border-slate-200 dark:border-slate-700" />
                             <div>
                                 <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Informasi Utama (Wajib Diisi)</h2>
@@ -467,7 +530,6 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                             <hr className="my-8 border-slate-200 dark:border-slate-700" />
                             <div>
                                 <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Informasi Tambahan (Opsional)</h2>
-                                {/* --- PERUBAHAN TATA LETAK GRID DIMULAI DI SINI --- */}
                                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
                                     <div className="md:col-span-2">
                                         <FileInput 
@@ -480,21 +542,10 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                                             subtext="Pilih file untuk diunggah (JPG, PNG, GIF maks. 2MB)." 
                                         />
                                     </div>
-                                    
-                                    {/* Spesifikasi sekarang mengambil setengah lebar di layar medium */}
                                     <div className="md:col-span-1">
                                         <TextArea name="spesifikasi" label="Spesifikasi" value={data.spesifikasi} onChange={e => setData('spesifikasi', e.target.value.toUpperCase())} error={errors.spesifikasi} rows="4" />
                                     </div>
-                                    
-                                    {/* --- PENAMBAHAN BARU: Input untuk 'Jenis Perawatan' --- */}
                                     <div className="md:col-span-1">
-                                        
-                                    </div>
-                                    
-                                    {/* Grid untuk jumlah dan harga tetap mengambil lebar penuh */}
-                                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                        <TextInput name="jumlah_dipakai" label="Jumlah Dipakai" type="number" value={data.jumlah_dipakai} onChange={e => handleJumlahChange('jumlah_dipakai', e.target.value)} error={errors.jumlah_dipakai} />
-                                        <TextInput name="jumlah_rusak" label="Jumlah Rusak" type="number" value={data.jumlah_rusak} onChange={e => handleJumlahChange('jumlah_rusak', e.target.value)} error={errors.jumlah_rusak} />
                                         <TextInput
                                             name="jenis_perawatan"
                                             label="Jenis Perawatan"
@@ -502,10 +553,13 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                                             onChange={e => setData('jenis_perawatan', e.target.value.toUpperCase())}
                                             error={errors.jenis_perawatan}
                                         />
+                                    </div>
+                                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                        <TextInput name="jumlah_dipakai" label="Jumlah Dipakai" type="number" value={data.jumlah_dipakai} onChange={e => handleJumlahChange('jumlah_dipakai', e.target.value)} error={errors.jumlah_dipakai} />
+                                        <TextInput name="jumlah_rusak" label="Jumlah Rusak" type="number" value={data.jumlah_rusak} onChange={e => handleJumlahChange('jumlah_rusak', e.target.value)} error={errors.jumlah_rusak} />
                                         {/* <TextInput name="harga" label="Harga Satuan" value={formatHarga(data.harga)} onChange={handleHargaChange} error={errors.harga} subtext="Contoh: 150.000" /> */}
                                     </div>
                                 </div>
-                                {/* --- AKHIR PERUBAHAN TATA LETAK GRID --- */}
                             </div>
                         </div>
                         <div className="flex items-center justify-end gap-4 px-6 py-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl border-t border-slate-200 dark:border-slate-700">

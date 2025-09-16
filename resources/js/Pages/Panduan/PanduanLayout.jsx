@@ -2,13 +2,15 @@ import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { route } from 'ziggy-js';
-import { 
-    DocumentPlusIcon, 
-    PencilSquareIcon, 
-    TrashIcon, 
-    PrinterIcon, 
-    WrenchScrewdriverIcon, 
-    ArrowDownTrayIcon 
+import {
+    DocumentPlusIcon,
+    PencilSquareIcon,
+    TrashIcon,
+    PrinterIcon,
+    WrenchScrewdriverIcon,
+    ArrowDownTrayIcon,
+    DocumentTextIcon, // <-- BARU: Ikon untuk laporan keseluruhan
+    FunnelIcon,       // <-- BARU: Ikon untuk laporan dengan filter
 } from '@heroicons/react/24/outline';
 
 // Komponen NavLink khusus untuk sidebar panduan
@@ -17,11 +19,10 @@ const PanduanNavLink = ({ href, active, children, icon }) => {
     return (
         <Link
             href={href}
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                active
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${active
                     ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-            }`}
+                }`}
         >
             <Icon className="h-5 w-5 flex-shrink-0" />
             <span className="flex-grow">{children}</span>
@@ -37,6 +38,8 @@ export default function PanduanLayout({ children, title }) {
         { name: 'Mengedit Data', route: 'panduan.edit', icon: PencilSquareIcon },
         { name: 'Menghapus Data', route: 'panduan.hapus', icon: TrashIcon },
         { name: 'Mencetak Label', route: 'panduan.cetak', icon: PrinterIcon },
+        { name: 'Cetak Laporan PDF', route: 'panduan.cetak.keseluruhan', icon: DocumentTextIcon },
+        { name: 'Ekspor Laporan', route: 'panduan.export.pdf', icon: ArrowDownTrayIcon  },
     ];
 
     return (
@@ -54,10 +57,10 @@ export default function PanduanLayout({ children, title }) {
                         <nav className="w-full bg-white dark:bg-slate-800 p-3 sm:rounded-xl shadow-lg">
                             <div className="flex flex-wrap items-center justify-center gap-4">
                                 {navLinks.map((link) => (
-                                    <PanduanNavLink 
+                                    <PanduanNavLink
                                         key={link.name}
-                                        href={route(link.route)} 
-                                        active={route().current(link.route)} 
+                                        href={route(link.route)}
+                                        active={route().current(link.route)}
                                         icon={link.icon}
                                     >
                                         {link.name}

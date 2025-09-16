@@ -48,7 +48,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     <div className="flex h-16 justify-between">
                         <div className="flex items-center">
                             <Link href="/" className="flex shrink-0 items-center gap-3">
-                                <img src="https://vvpicnwjplzltrvqidxk.supabase.co/storage/v1/object/public/inventaris-fotos/logo_klinik.png" alt="Logo Klinik" className="block h-10 w-auto" />
+                                <img src="https://gfztdbbmjoniayvycnsb.supabase.co/storage/v1/object/public/inventaris-fotos/aset/logo_klinik.png " alt="Logo Klinik" className="block h-10 w-auto" />
                                 <div className="sm:hidden text-lg font-bold text-slate-800 dark:text-slate-200">
                                     {header}
                                 </div>

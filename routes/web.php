@@ -18,7 +18,16 @@ Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->gr
      Route::get('/cetak-label', [PanduanController::class, 'showCetak'])->name('cetak');
      Route::get('/aksi-massal', [PanduanController::class, 'showBulk'])->name('bulk');
      Route::get('/export-sort', [PanduanController::class, 'showExport'])->name('export');
+
+     // --- ROUTE BARU DITAMBAHKAN DI SINI ---
+     
+     // Route untuk panduan "Cetak Laporan Keseluruhan" (fungsi print)
+     Route::get('/cetak-keseluruhan', [PanduanController::class, 'showCetakKeseluruhan'])->name('cetak.keseluruhan');
+
+     // Route untuk panduan "Ekspor Laporan PDF dengan Filter" (fungsi exportPDF)
+     Route::get('/export-laporan', [PanduanController::class, 'showExportPdf'])->name('export.pdf');
 });
+
 
 Route::delete('/inventaris/bulk-destroy', [InventarisController::class, 'bulkDestroy'])->name('inventaris.bulkDestroy');
 Route::post('/inventaris/{inventari}/duplicate', [App\Http\Controllers\InventarisController::class, 'duplicate'])->name('inventaris.duplicate');
@@ -33,8 +42,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
      // --- Grup Khusus untuk Fitur Inventaris ---
 
-     // 1. Route Resource untuk operasi CRUD standar (index, create, store, edit, update, destroy)
-     Route::resource('inventaris', InventarisController::class)->except(['show']);
+     // 1. Route Resource untuk operasi CRUD standar (index, create, store, edit, destroy)
+     // --- PERUBAHAN DI SINI: 'update' dikecualikan agar bisa didefinisikan ulang secara manual ---
+     Route::resource('inventaris', InventarisController::class)->except(['show', 'update']);
+
+     // --- PERUBAHAN DI SINI: Rute 'update' didefinisikan secara manual dengan parameter {id} ---
+     // Ini akan menonaktifkan Route-Model Binding untuk method 'update' dan memperbaiki masalah error handling.
+     Route::put('inventaris/{id}', [InventarisController::class, 'update'])->name('inventaris.update');
+
 
      // 2. Route untuk fitur Bulk (Massal)
      Route::get('/inventaris/bulk-edit', [InventarisController::class, 'bulkEdit'])

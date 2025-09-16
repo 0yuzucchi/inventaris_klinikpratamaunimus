@@ -35,4 +35,17 @@ class PanduanController extends Controller
     {
         return Inertia::render('Panduan/CetakLabel');
     }
+
+    public function showCetakKeseluruhan()
+    {
+        // Ganti 'Panduan/CetakLaporanKeseluruhan' sesuai struktur folder komponen Anda
+        return Inertia::render('Panduan/CetakLaporanKeseluruhan'); 
+    }
+
+    // Metode baru untuk menampilkan panduan ekspor PDF dengan filter
+    public function showExportPdf()
+    {
+        // Ganti 'Panduan/EksporPDFFilter' sesuai struktur folder komponen Anda
+        return Inertia::render('Panduan/EksporLaporan');
+    }
 }

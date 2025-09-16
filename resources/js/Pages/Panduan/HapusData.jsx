@@ -60,7 +60,7 @@ function HapusDataContent() {
                         </div>
                         <div className="pt-6"> {/* Step terakhir hanya butuh padding-top */}
                             <Step number="4" title="Selesaikan Penghapusan">
-                                <p>Klik tombol <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-green-500 dark:text-green-400 text-base">Ya, Hapus</code> untuk menghapus data secara permanen. Jika Anda ragu, klik <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-red-500 dark:text-red-400 text-base">Batal</code>.</p>
+                                <p>Klik tombol <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-red-500 dark:text-red-400 text-base">Ya, Hapus</code> untuk menghapus data secara permanen. Jika Anda ragu, klik <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-red-500 dark:text-red-400 text-base">Batal</code>.</p>
                             </Step>
                         </div>
                     </div>
@@ -92,7 +92,7 @@ function HapusDataContent() {
                         </div>
                         <div className="pt-6">
                             <Step number="4" title="Selesaikan Penghapusan Massal">
-                                <p>Klik tombol <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-green-500 dark:text-green-400 text-base">Ya, Hapus</code> untuk menghapus semua data yang telah Anda pilih secara permanen.</p>
+                                <p>Klik tombol <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded text-red-500 dark:text-red-400 text-base">Ya, Hapus</code> untuk menghapus semua data yang telah Anda pilih secara permanen.</p>
                             </Step>
                         </div>
                     </div>
