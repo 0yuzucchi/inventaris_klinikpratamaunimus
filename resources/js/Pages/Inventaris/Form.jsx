@@ -542,10 +542,15 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                                             subtext="Pilih file untuk diunggah (JPG, PNG, GIF maks. 2MB)." 
                                         />
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div className="md:col-span-2">
                                         <TextArea name="spesifikasi" label="Spesifikasi" value={data.spesifikasi} onChange={e => setData('spesifikasi', e.target.value.toUpperCase())} error={errors.spesifikasi} rows="4" />
                                     </div>
                                     <div className="md:col-span-1">
+                                        
+                                    </div>
+                                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                        <TextInput name="jumlah_dipakai" label="Jumlah Dipakai" type="number" value={data.jumlah_dipakai} onChange={e => handleJumlahChange('jumlah_dipakai', e.target.value)} error={errors.jumlah_dipakai} />
+                                        <TextInput name="jumlah_rusak" label="Jumlah Rusak" type="number" value={data.jumlah_rusak} onChange={e => handleJumlahChange('jumlah_rusak', e.target.value)} error={errors.jumlah_rusak} />
                                         <TextInput
                                             name="jenis_perawatan"
                                             label="Jenis Perawatan"
@@ -553,10 +558,6 @@ export default function Form({ inventari, auth, ruangList = [], namaBarangList =
                                             onChange={e => setData('jenis_perawatan', e.target.value.toUpperCase())}
                                             error={errors.jenis_perawatan}
                                         />
-                                    </div>
-                                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                        <TextInput name="jumlah_dipakai" label="Jumlah Dipakai" type="number" value={data.jumlah_dipakai} onChange={e => handleJumlahChange('jumlah_dipakai', e.target.value)} error={errors.jumlah_dipakai} />
-                                        <TextInput name="jumlah_rusak" label="Jumlah Rusak" type="number" value={data.jumlah_rusak} onChange={e => handleJumlahChange('jumlah_rusak', e.target.value)} error={errors.jumlah_rusak} />
                                         {/* <TextInput name="harga" label="Harga Satuan" value={formatHarga(data.harga)} onChange={handleHargaChange} error={errors.harga} subtext="Contoh: 150.000" /> */}
                                     </div>
                                 </div>
