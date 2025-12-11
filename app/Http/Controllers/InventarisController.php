@@ -24,11 +24,6 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Codedge\Fpdf\Fpdf\Fpdf; // Pustaka FPDF inti
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-use Endroid\QrCode\Builder\Builder;
-use Endroid\QrCode\Encoding\Encoding;
-use Endroid\QrCode\ErrorCorrectionLevel;
-use Endroid\QrCode\Writer\PngWriter;
-
 class InventarisController extends Controller
 {
 
