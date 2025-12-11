@@ -27,7 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
-use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Writer\PngWriter;    
 
 class InventarisController extends Controller
 {
@@ -573,155 +573,152 @@ class InventarisController extends Controller
     }
 
     protected function drawLabel(Fpdf $fpdf, Inventaris $item, float $x, float $y)
-    {
-        // --- PENGATURAN AWAL & DIMENSI (Tidak ada perubahan) ---
-        $fpdf->SetFont('Arial', '', 10);
-        $fpdf->SetTextColor(0, 0, 0);
-        $fpdf->SetDrawColor(0, 0, 0);
-        $fpdf->SetLineWidth(0.2);
+{
+    // --- PENGATURAN AWAL & DIMENSI (Tidak ada perubahan) ---
+    $fpdf->SetFont('Arial', '', 10);
+    $fpdf->SetTextColor(0, 0, 0);
+    $fpdf->SetDrawColor(0, 0, 0);
+    $fpdf->SetLineWidth(0.2);
 
-        $labelW = 80;
-        $labelH = 40;
-        $headerH = 16;
-        $logoCellW = 20;
-        $infoCellX = $x + $logoCellW;
-        $infoCellW = $labelW - $logoCellW;
+    $labelW = 80;
+    $labelH = 40;
+    $headerH = 16;
+    $logoCellW = 20;
+    $infoCellX = $x + $logoCellW;
+    $infoCellW = $labelW - $logoCellW;
 
-        // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA (Tidak ada perubahan) ---
-        // ... (kode menggambar kotak tetap sama) ...
-        $fpdf->Rect($x, $y, $labelW, $labelH);
-        $fpdf->Line($x + $logoCellW, $y, $x + $logoCellW, $y + $headerH);
-        $fpdf->SetLineWidth(0.4);
-        $fpdf->Line($x, $y + $headerH, $x + $labelW, $y + $headerH);
-        $fpdf->SetLineWidth(0.2);
-        $fpdf->Rect($infoCellX, $y, $infoCellW, $headerH);
-        $titleBoxH = 6;
-        $fpdf->Line($infoCellX, $y + $titleBoxH, $x + $labelW, $y + $titleBoxH);
+    // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA (Tidak ada perubahan) ---
+    $fpdf->Rect($x, $y, $labelW, $labelH);
+    $fpdf->Line($x + $logoCellW, $y, $x + $logoCellW, $y + $headerH);
+    $fpdf->SetLineWidth(0.4);
+    $fpdf->Line($x, $y + $headerH, $x + $labelW, $y + $headerH);
+    $fpdf->SetLineWidth(0.2);
+    $fpdf->Rect($infoCellX, $y, $infoCellW, $headerH);
+    $titleBoxH = 6;
+    $fpdf->Line($infoCellX, $y + $titleBoxH, $x + $labelW, $y + $titleBoxH);
 
+    // --- 2. ISI SEL LOGO (KIRI) (Tidak ada perubahan) ---
+    $logoDispHeight = 9;
+    $logoTextHeight = 5.5;
+    $totalLogoBlockHeight = $logoDispHeight + $logoTextHeight;
+    $logoStartY = $y + ($headerH - $totalLogoBlockHeight) / 2;
 
-        // --- 2. ISI SEL LOGO (KIRI) (Tidak ada perubahan) ---
-        // ... (kode logo tetap sama) ...
-        $logoDispHeight = 9;
-        $logoTextHeight = 5.5;
-        $totalLogoBlockHeight = $logoDispHeight + $logoTextHeight;
-        $logoStartY = $y + ($headerH - $totalLogoBlockHeight) / 2;
-
-        try {
-            $logoPath = public_path('images/logoklinik.png');
-            if (file_exists($logoPath)) {
-                $fpdf->Image($logoPath, $x + 6, $logoStartY, 8);
-            }
-        } catch (\Exception $e) {
+    try {
+        $logoPath = public_path('images/logoklinik.png');
+        if (file_exists($logoPath)) {
+            $fpdf->Image($logoPath, $x + 6, $logoStartY, 8);
         }
-
-        $fpdf->SetFont('Arial', 'B', 5);
-        $fpdf->SetXY($x, $logoStartY + $logoDispHeight);
-        $fpdf->MultiCell($logoCellW, 1.8, "INVENTARIS\nKLINIK PRATAMA\nUNIMUS", 0, 'C');
-
-
-        // --- 3. ISI SEL INFO (KANAN) (Tidak ada perubahan) ---
-        // ... (kode info pengadaan tetap sama) ...
-        $fpdf->SetFont('Arial', 'B', 10);
-        $fpdf->SetXY($infoCellX, $y);
-        $fpdf->Cell($infoCellW, $titleBoxH, 'PENGADAAN BARANG', 0, 0, 'C');
-
-        $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? 'N/A');
-        $unitPengguna = $item->tempat_pemakaian ?: '...';
-
-        $yPos1 = $y + $titleBoxH + 1.5;
-        $yPos2 = $y + $titleBoxH + 5.5;
-
-        $fpdf->SetFont('Arial', '', 7);
-        $fpdf->SetXY($infoCellX + 1, $yPos1);
-        $fpdf->Cell(22, 4, 'NO. PENGADAAN:');
-        $fpdf->SetFont('Arial', 'B', 11);
-        $fpdf->SetXY($fpdf->GetX(), $yPos1);
-        $fpdf->Cell(28, 4, $nomorPengadaan);
-
-        $fpdf->SetFont('Arial', '', 7);
-        $fpdf->SetXY($infoCellX + 1, $yPos2);
-        $fpdf->Cell(22, 4, 'UNIT PENGGUNA:');
-        $fpdf->SetFont('Arial', 'B', 11);
-        $fpdf->SetXY($fpdf->GetX(), $yPos2);
-        $fpdf->Cell(28, 4, $unitPengguna);
-
-        // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI DENGAN QR CODE) ---
-        // ... (kode penempatan teks dan QR tetap sama) ...
-        $bodyY = $y + $headerH;
-        $bodyH = $labelH - $headerH;
-        $margin = 1.5;
-
-        $qrCodeSize = $bodyH - ($margin * 2) - 2;
-        $qrCodeX = $x + $labelW - $qrCodeSize - $margin;
-        $qrCodeY = $bodyY + ($bodyH - $qrCodeSize) / 2;
-        $textBlockW = $labelW - $qrCodeSize - ($margin * 3);
-        $textBlockX = $x + $margin;
-
-
-        // ==========================================================
-        // == PERUBAHAN UTAMA ADA DI SINI ==
-        // ==========================================================
-        try {
-            // 1. BUAT URL LENGKAP, sama seperti di frontend
-            // Parameter ketiga (true) membuatnya menjadi URL absolut (http://...)
-            $urlUntukQr = route('inventaris.show', ['inventari' => $item->id], true);
-
-            // 2. Buat QR Code menggunakan Builder dengan data URL
-            $result = Builder::create()
-                ->writer(new PngWriter())
-                ->data($urlUntukQr) // <-- MENGGUNAKAN URL, BUKAN NOMOR PENGADAAN
-                ->encoding(new Encoding('UTF-8'))
-                ->errorCorrectionLevel(ErrorCorrectionLevel::Medium)
-                ->size(200)
-                ->margin(1)
-                ->build();
-
-            $qrCodeString = $result->getString();
-            $qrCodeStream = 'data://image/png;base64,' . base64_encode($qrCodeString);
-
-            // Sisipkan ke PDF
-            $fpdf->Image($qrCodeStream, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
-        } catch (\Exception $e) {
-            // Error handling
-            $fpdf->SetFillColor(230, 230, 230);
-            $fpdf->Rect($qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'F');
-            Log::error('Gagal membuat QR Code Endroid: ' . $e->getMessage());
-        }
-        // ==========================================================
-        // == AKHIR PERUBAHAN ==
-        // ==========================================================
-
-
-        // --- PROSES DATA & PENEMPATAN TEKS (Tidak ada perubahan) ---
-        // ... (semua kode untuk menampilkan nama barang & spesifikasi tetap sama) ...
-        $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
-        $kelompokTextY = $bodyY + $margin + 1;
-        $fpdf->SetFont('Arial', '', 7);
-        $fpdf->SetXY($textBlockX + 1, $kelompokTextY);
-        $fpdf->Cell(40, 3, 'Kelompok Barang / Alat');
-        $kelompokTextHeight = 4;
-        $namaBarang = $item->nama_barang ?? '-';
-        $rawSpek = $item->spesifikasi ?: '...';
-        $parts = explode(',', $rawSpek);
-        if (count($parts) > 3) $rawSpek = implode(',', array_slice($parts, 0, 3));
-        if (strlen($rawSpek) > 80) $rawSpek = substr($rawSpek, 0, 80);
-        $spesifikasi = $rawSpek;
-        $fontSizeNama = $this->calculateFontSize($namaBarang, 12, [45 => 8, 30 => 10]);
-        $fontSizeSpek = $this->calculateFontSize($spesifikasi, 10, [50 => 7, 35 => 8]);
-        $fpdf->SetFont('Arial', 'B', $fontSizeNama);
-        $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $textBlockW - 4 ? 8 : 4.5;
-        $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
-        $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $textBlockW - 4 ? 7 : 4;
-        $totalTextHeight = $namaBarangHeight + $spesifikasiHeight;
-        $availableSpaceForCentering = $bodyH - ($margin * 2) - $kelompokTextHeight;
-        $centeredTextStartY = ($bodyY + $margin + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
-        $fpdf->SetFont('Arial', 'B', $fontSizeNama);
-        $fpdf->SetXY($textBlockX, $centeredTextStartY);
-        $fpdf->MultiCell($textBlockW, 4.5, $namaBarang, 0, 'C');
-        $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
-        $fpdf->SetX($textBlockX);
-        $fpdf->MultiCell($textBlockW, 4, $spesifikasi, 0, 'C');
+    } catch (\Exception $e) {
     }
+
+    $fpdf->SetFont('Arial', 'B', 5);
+    $fpdf->SetXY($x, $logoStartY + $logoDispHeight);
+    $fpdf->MultiCell($logoCellW, 1.8, "INVENTARIS\nKLINIK PRATAMA\nUNIMUS", 0, 'C');
+
+    // --- 3. ISI SEL INFO (KANAN) (Tidak ada perubahan) ---
+    $fpdf->SetFont('Arial', 'B', 10);
+    $fpdf->SetXY($infoCellX, $y);
+    $fpdf->Cell($infoCellW, $titleBoxH, 'PENGADAAN BARANG', 0, 0, 'C');
+    $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? 'N/A');
+    $unitPengguna = $item->tempat_pemakaian ?: '...';
+    $yPos1 = $y + $titleBoxH + 1.5;
+    $yPos2 = $y + $titleBoxH + 5.5;
+    $fpdf->SetFont('Arial', '', 7);
+    $fpdf->SetXY($infoCellX + 1, $yPos1);
+    $fpdf->Cell(22, 4, 'NO. PENGADAAN:');
+    $fpdf->SetFont('Arial', 'B', 11);
+    $fpdf->SetXY($fpdf->GetX(), $yPos1);
+    $fpdf->Cell(28, 4, $nomorPengadaan);
+    $fpdf->SetFont('Arial', '', 7);
+    $fpdf->SetXY($infoCellX + 1, $yPos2);
+    $fpdf->Cell(22, 4, 'UNIT PENGGUNA:');
+    $fpdf->SetFont('Arial', 'B', 11);
+    $fpdf->SetXY($fpdf->GetX(), $yPos2);
+    $fpdf->Cell(28, 4, $unitPengguna);
+
+    // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI DENGAN QR CODE) ---
+    $bodyY = $y + $headerH;
+    $bodyH = $labelH - $headerH;
+    $margin = 1.5;
+    $qrCodeSize = $bodyH - ($margin * 2) - 2;
+    $qrCodeX = $x + $labelW - $qrCodeSize - $margin;
+    $qrCodeY = $bodyY + ($bodyH - $qrCodeSize) / 2;
+    $textBlockW = $labelW - $qrCodeSize - ($margin * 3);
+    $textBlockX = $x + $margin;
+
+    // ==========================================================
+    // == PERUBAHAN UTAMA UNTUK KOMPATIBILITAS LOKAL & VERCEL ==
+    // ==========================================================
+    $qrCodePath = null;
+    try {
+        $urlUntukQr = route('inventaris.show', ['inventari' => $item->id], true);
+
+        $result = Builder::create()
+            ->writer(new PngWriter())
+            ->data($urlUntukQr)
+            ->encoding(new Encoding('UTF-8'))
+            ->errorCorrectionLevel(ErrorCorrectionLevel::Medium)
+            ->size(200)
+            ->margin(1)
+            ->build();
+
+        // 1. Gunakan fungsi PHP untuk mendapatkan direktori temporary yang sesuai dengan OS
+        $tempDir = sys_get_temp_dir();
+
+        // 2. Buat path file yang unik di direktori temporary tersebut
+        // DIRECTORY_SEPARATOR akan otomatis menjadi '\' di Windows dan '/' di Linux
+        $qrCodePath = $tempDir . DIRECTORY_SEPARATOR . 'qr_' . uniqid() . '.png';
+
+        // 3. Simpan QR code sebagai file gambar sementara
+        $result->saveToFile($qrCodePath);
+
+        // 4. Sisipkan gambar dari file yang sudah disimpan ke PDF
+        $fpdf->Image($qrCodePath, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
+
+    } catch (\Exception $e) {
+        $fpdf->SetFillColor(230, 230, 230);
+        $fpdf->Rect($qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'F');
+        Log::error('Gagal membuat QR Code Endroid: ' . $e->getMessage());
+    } finally {
+        // 5. (Penting!) Hapus file sementara setelah digunakan
+        if ($qrCodePath && file_exists($qrCodePath)) {
+            unlink($qrCodePath);
+        }
+    }
+    // ==========================================================
+    // == AKHIR PERUBAHAN ==
+    // ==========================================================
+
+
+    // --- PROSES DATA & PENEMPATAN TEKS (Tidak ada perubahan) ---
+    $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
+    $kelompokTextY = $bodyY + $margin + 1;
+    $fpdf->SetFont('Arial', '', 7);
+    $fpdf->SetXY($textBlockX + 1, $kelompokTextY);
+    $fpdf->Cell(40, 3, 'Kelompok Barang / Alat');
+    $kelompokTextHeight = 4;
+    $namaBarang = $item->nama_barang ?? '-';
+    $rawSpek = $item->spesifikasi ?: '...';
+    $parts = explode(',', $rawSpek);
+    if (count($parts) > 3) $rawSpek = implode(',', array_slice($parts, 0, 3));
+    if (strlen($rawSpek) > 80) $rawSpek = substr($rawSpek, 0, 80);
+    $spesifikasi = $rawSpek;
+    $fontSizeNama = $this->calculateFontSize($namaBarang, 12, [45 => 8, 30 => 10]);
+    $fontSizeSpek = $this->calculateFontSize($spesifikasi, 10, [50 => 7, 35 => 8]);
+    $fpdf->SetFont('Arial', 'B', $fontSizeNama);
+    $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $textBlockW - 4 ? 8 : 4.5;
+    $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
+    $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $textBlockW - 4 ? 7 : 4;
+    $totalTextHeight = $namaBarangHeight + $spesifikasiHeight;
+    $availableSpaceForCentering = $bodyH - ($margin * 2) - $kelompokTextHeight;
+    $centeredTextStartY = ($bodyY + $margin + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
+    $fpdf->SetFont('Arial', 'B', $fontSizeNama);
+    $fpdf->SetXY($textBlockX, $centeredTextStartY);
+    $fpdf->MultiCell($textBlockW, 4.5, $namaBarang, 0, 'C');
+    $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
+    $fpdf->SetX($textBlockX);
+    $fpdf->MultiCell($textBlockW, 4, $spesifikasi, 0, 'C');
+}
 
     public function downloadBulkLabels(Request $request)
     {
