@@ -56,7 +56,9 @@ export default function AuthenticatedLayout({ header, children }) {
                             <div className="hidden space-x-4 sm:-my-px sm:ms-10 sm:flex">
                                 <NavLink href={route('dashboard')} active={route().current('dashboard')}>Dashboard</NavLink>
                                 <NavLink href={route('inventaris.index')} active={route().current('inventaris.*')}>Inventaris</NavLink>
+                                <NavLink href={route('chatbot.index')} active={route().current('chatbot.*')}>ChatBot</NavLink>
                                 <NavLink href={route('panduan.index')} active={route().current('panduan.*')}>Panduan</NavLink>
+                                
                             </div>
                         </div>
 
@@ -111,6 +113,7 @@ export default function AuthenticatedLayout({ header, children }) {
                      <div className="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink href={route('dashboard')} active={route().current('dashboard')}>Dashboard</ResponsiveNavLink>
                         <ResponsiveNavLink href={route('inventaris.index')} active={route().current('inventaris.*')}>Inventaris</ResponsiveNavLink>
+                        <ResponsiveNavLink href={route('chatbot.index')} active={route().current('chatbot.*')}>ChatBot</ResponsiveNavLink>
                         <ResponsiveNavLink href={route('panduan.index')} active={route().current('panduan.*')}>Panduan</ResponsiveNavLink>
                     </div>
                     <div className="border-t border-slate-200 dark:border-slate-700 pb-1 pt-4">

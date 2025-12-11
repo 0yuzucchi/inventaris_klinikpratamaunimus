@@ -5,83 +5,77 @@ use App\Http\Controllers\InventarisController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PanduanController;
+use App\Http\Controllers\InventoryAIController;
+use App\Http\Controllers\ChatbotController;
 
-Route::prefix('panduan')->name('panduan.')->middleware(['auth', 'verified'])->group(function () {
-     // Route default akan redirect ke panduan 'tambah'
-     Route::get('/', function () {
-          return redirect()->route('panduan.tambah');
-     })->name('index');
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| Di sini Anda dapat mendaftarkan rute web untuk aplikasi Anda. Rute-rute
+| ini dimuat oleh RouteServiceProvider dan semuanya akan
+| ditugaskan ke grup middleware "web". Buat sesuatu yang hebat!
+|
+*/
 
-     Route::get('/tambah', [PanduanController::class, 'showTambah'])->name('tambah');
-     Route::get('/edit', [PanduanController::class, 'showEdit'])->name('edit');
-     Route::get('/hapus', [PanduanController::class, 'showHapus'])->name('hapus');
-     Route::get('/cetak-label', [PanduanController::class, 'showCetak'])->name('cetak');
-     Route::get('/aksi-massal', [PanduanController::class, 'showBulk'])->name('bulk');
-     Route::get('/export-sort', [PanduanController::class, 'showExport'])->name('export');
-
-     // --- ROUTE BARU DITAMBAHKAN DI SINI ---
-     
-     // Route untuk panduan "Cetak Laporan Keseluruhan" (fungsi print)
-     Route::get('/cetak-keseluruhan', [PanduanController::class, 'showCetakKeseluruhan'])->name('cetak.keseluruhan');
-
-     // Route untuk panduan "Ekspor Laporan PDF dengan Filter" (fungsi exportPDF)
-     Route::get('/export-laporan', [PanduanController::class, 'showExportPdf'])->name('export.pdf');
-});
-
-
-Route::delete('/inventaris/bulk-destroy', [InventarisController::class, 'bulkDestroy'])->name('inventaris.bulkDestroy');
-Route::post('/inventaris/{inventari}/duplicate', [App\Http\Controllers\InventarisController::class, 'duplicate'])->name('inventaris.duplicate');
-
+// Rute default & Rute yang tidak memerlukan otentikasi
 Route::redirect('/', '/login');
+Route::post('/scan-barang-ai', [InventoryAIController::class, 'identifyItem'])->name('scan.ai');
+
 
 // --- GRUP RUTE YANG MEMERLUKAN OTENTIKASI ---
 Route::middleware(['auth', 'verified'])->group(function () {
 
-     // Rute Dashboard
-     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    // Rute Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-     // --- Grup Khusus untuk Fitur Inventaris ---
+    // Rute Chatbot
+    Route::get('/chatbot', [ChatbotController::class, 'index'])->name('chatbot.index');
+    Route::post('/chatbot/ask', [ChatbotController::class, 'chat'])->name('chatbot.ask');
 
-     // 1. Route Resource untuk operasi CRUD standar (index, create, store, edit, destroy)
-     // --- PERUBAHAN DI SINI: 'update' dikecualikan agar bisa didefinisikan ulang secara manual ---
-     Route::resource('inventaris', InventarisController::class)->except(['show', 'update']);
+    // Rute Panduan
+    Route::prefix('panduan')->name('panduan.')->group(function () {
+        Route::get('/', fn() => redirect()->route('panduan.tambah'))->name('index');
+        Route::get('/tambah', [PanduanController::class, 'showTambah'])->name('tambah');
+        Route::get('/edit', [PanduanController::class, 'showEdit'])->name('edit');
+        Route::get('/hapus', [PanduanController::class, 'showHapus'])->name('hapus');
+        Route::get('/cetak-label', [PanduanController::class, 'showCetak'])->name('cetak');
+        Route::get('/aksi-massal', [PanduanController::class, 'showBulk'])->name('bulk');
+        Route::get('/export-sort', [PanduanController::class, 'showExport'])->name('export');
+        Route::get('/cetak-keseluruhan', [PanduanController::class, 'showCetakKeseluruhan'])->name('cetak.keseluruhan');
+        Route::get('/export-laporan', [PanduanController::class, 'showExportPdf'])->name('export.pdf');
+    });
 
-     // --- PERUBAHAN DI SINI: Rute 'update' didefinisikan secara manual dengan parameter {id} ---
-     // Ini akan menonaktifkan Route-Model Binding untuk method 'update' dan memperbaiki masalah error handling.
-     Route::put('inventaris/{id}', [InventarisController::class, 'update'])->name('inventaris.update');
+    // --- GRUP RUTE INVENTARIS ---
+    // Rute-rute spesifik harus didefinisikan SEBELUM rute resource.
+    Route::prefix('inventaris')->name('inventaris.')->group(function () {
+        // --- Rute Spesifik (yang tidak mengandung parameter dinamis di awal) ---
+        Route::get('/print', [InventarisController::class, 'print'])->name('print');
+        Route::get('/export/pdf', [InventarisController::class, 'exportPDF'])->name('exportPDF');
+        Route::get('/export/excel', [InventarisController::class, 'exportExcel'])->name('exportExcel');
+        Route::get('/bulk-edit', [InventarisController::class, 'bulkEdit'])->name('bulkEdit');
+        Route::post('/bulk-update', [InventarisController::class, 'bulkUpdate'])->name('bulkUpdate');
+        Route::delete('/bulk-destroy', [InventarisController::class, 'bulkDestroy'])->name('bulkDestroy');
+        Route::post('/download-bulk-labels', [InventarisController::class, 'downloadBulkLabels'])->name('downloadBulkLabels');
+
+        // --- Rute dengan parameter dinamis ---
+        // Rute-rute ini harus berada setelah rute yang lebih spesifik di atas.
+        Route::post('/{inventari}/duplicate', [InventarisController::class, 'duplicate'])->name('duplicate');
+        Route::get('/{inventari}/generate-label', [InventarisController::class, 'generateLabel'])->name('generateLabel');
+    });
+
+    // --- RUTE RESOURCE INVENTARIS ---
+    // Ini akan menangani index, create, store, show, edit, update, destroy secara otomatis.
+    // Karena rute-rute di atas sudah didefinisikan, Laravel tidak akan salah mencocokkan lagi.
+    Route::resource('inventaris', InventarisController::class);
 
 
-     // 2. Route untuk fitur Bulk (Massal)
-     Route::get('/inventaris/bulk-edit', [InventarisController::class, 'bulkEdit'])
-          ->name('inventaris.bulkEdit');
-
-     // PERUBAHAN DI SINI: Mengubah 'post' menjadi 'put' agar sesuai dengan request dari form
-     Route::post('/inventaris/bulk-update', [InventarisController::class, 'bulkUpdate'])
-          ->name('inventaris.bulkUpdate');
-
-     // 3. Route untuk membuat dan mengunduh Label
-     // Route ini untuk mencetak label SATUAN. Menggunakan GET dan route model binding.
-     Route::get('/inventaris/{inventari}/generate-label', [InventarisController::class, 'generateLabel'])
-          ->name('inventaris.generateLabel');
-
-     // Route ini untuk mengunduh label secara MASSAL (BULK). Menggunakan POST.
-     Route::post('/inventaris/download-bulk-labels', [InventarisController::class, 'downloadBulkLabels'])
-          ->name('inventaris.downloadBulkLabels');
-
-     // 4. Route untuk Ekspor Data
-     Route::get('/inventaris/export/pdf', [InventarisController::class, 'exportPDF'])
-          ->name('inventaris.exportPDF');
-
-     Route::get('/inventaris/export/excel', [InventarisController::class, 'exportExcel'])
-          ->name('inventaris.exportExcel');
-     Route::get('/inventaris/print', [InventarisController::class, 'print'])
-          ->name('inventaris.print');
-
-     // Rute untuk manajemen profil
-     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    // Rute Manajemen Profil
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Rute otentikasi
-require __DIR__ . '/auth.php';
+// Rute Otentikasi
+require __DIR__.'/auth.php';

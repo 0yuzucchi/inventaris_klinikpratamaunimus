@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import QRScannerModal from '@/Components/QRScannerModal'; // Impor komponen scanner
+import { QrCodeIcon } from '@heroicons/react/24/outline'; // Impor ikon untuk tombol scan
 import { route } from 'ziggy-js';
 import {
     ChevronDownIcon,
@@ -71,7 +73,9 @@ const InventarisCard = ({ item, formatDate, formatCurrency, deleteHandler, isSel
             )}
 
             <div className="flex-grow">
-                <p className="font-bold text-lg text-slate-800 dark:text-white">{(item.nama_barang || '').toUpperCase()}</p>
+                <Link href={route('inventaris.show', item.id)} className="group">
+    <p className="font-bold text-lg text-slate-800 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-500 transition-colors">{(item.nama_barang || '').toUpperCase()}</p>
+</Link>
                 <p className="text-sm text-slate-500 dark:text-slate-400">No: <span className="font-medium text-slate-600 dark:text-slate-300">{item.nomor || 'N/A'}</span> / Kode: <span className="font-medium text-slate-600 dark:text-slate-300">{(item.kode_barang || 'N/A').toUpperCase()}</span></p>
                 <p className="text-base font-semibold text-green-700 dark:text-green-500 mt-1">{formatCurrency(item.harga)}</p>
             </div>
@@ -97,6 +101,7 @@ const InventarisCard = ({ item, formatDate, formatCurrency, deleteHandler, isSel
 // ==============================================================================
 export default function Index({ inventarisGrouped, auth }) {
     // --- State, Refs, dan Logika ---
+    const [isScannerOpen, setIsScannerOpen] = useState(false); // State baru untuk scanner
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
@@ -120,6 +125,27 @@ export default function Index({ inventarisGrouped, auth }) {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [filterYear, setFilterYear] = useState('');
+
+const handleScanSuccess = (decodedUrl) => {
+    console.log('➡️ [INDEX] handleScanSuccess dipanggil dengan URL:', decodedUrl);
+    setIsScannerOpen(false);
+
+    // Cek apakah URL yang diterima valid
+    if (decodedUrl && typeof decodedUrl === 'string' && decodedUrl.startsWith('http')) {
+        console.log('🚀 [INDEX] URL valid, mencoba redirect dengan router.visit()...');
+        try {
+            router.visit(decodedUrl, {
+                onFinish: () => console.log('✅ [ROUTER] Transisi Inertia selesai.'),
+                onError: (errors) => console.error('❌ [ROUTER] Terjadi error saat transisi Inertia:', errors),
+            });
+        } catch (error) {
+            console.error('❌ [ROUTER] Gagal menjalankan router.visit():', error);
+        }
+    } else {
+        console.error('❌ [INDEX] URL tidak valid atau kosong. Redirect dibatalkan.', decodedUrl);
+        alert(`Gagal melakukan redirect. Kode QR berisi data yang tidak valid: ${decodedUrl}`);
+    }
+};
 
     // --- Logika filter data di frontend ---
     const isFilterActive = useMemo(() => {
@@ -361,6 +387,10 @@ export default function Index({ inventarisGrouped, auth }) {
                                     <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 lg:flex lg:gap-3 lg:flex-grow-[2]">
                                             <Link href={route('inventaris.create')} className="flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 font-bold text-white transition-transform hover:scale-105 lg:flex-1"><PlusIcon className="h-5 w-5 mr-2" /><span>Tambah</span></Link>
+                                            <button onClick={() => setIsScannerOpen(true)} className="flex items-center justify-center rounded-lg bg-slate-700 px-4 py-2 font-bold text-white transition-transform hover:scale-105 dark:bg-slate-600 lg:flex-1">
+        <QrCodeIcon className="h-5 w-5 mr-2" /><span>Scan</span>
+    </button>
+    <Link href={selectedIds.length > 0 ? route('inventaris.bulkEdit', { ids: selectedIds.join(',') }) : '#'} as="button" disabled={selectedIds.length === 0} className="..."></Link>
                                             <Link href={selectedIds.length > 0 ? route('inventaris.bulkEdit', { ids: selectedIds.join(',') }) : '#'} as="button" disabled={selectedIds.length === 0} className="flex items-center justify-center rounded-lg bg-yellow-500 px-4 py-2 font-bold text-white transition-transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed disabled:bg-yellow-300 dark:disabled:bg-yellow-800 dark:disabled:text-yellow-500 lg:flex-1"><WrenchScrewdriverIcon className="h-5 w-5 mr-2" /><span>Edit ({selectedIds.length})</span></Link>
                                             <form action={route('inventaris.downloadBulkLabels')} method="POST" target="_blank" className="w-full h-full lg:flex-1"><input type="hidden" name="_token" value={csrfToken} />{selectedIds.map(id => (<input type="hidden" name="ids[]" value={id} key={id} />))}<button type="submit" disabled={selectedIds.length === 0} className="flex w-full h-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 font-bold text-white transition-transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800 dark:disabled:text-blue-500"><DocumentDuplicateIcon className="h-5 w-5 mr-2" /><span>Cetak ({selectedIds.length})</span></button></form>
                                             <button onClick={() => setIsBatchDeleteModalOpen(true)} disabled={selectedIds.length === 0} className="flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 font-bold text-white transition-transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed disabled:bg-red-300 dark:disabled:bg-red-800 dark:disabled:text-red-500 lg:flex-1"><TrashIcon className="h-5 w-5 mr-2" /><span>Hapus ({selectedIds.length})</span></button>
@@ -419,7 +449,13 @@ export default function Index({ inventarisGrouped, auth }) {
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => handleCheckboxChange(item.id)} className="h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-green-600 focus:ring-green-500" /></td>
                                                                 {/* PERUBAHAN 2: Menggunakan item.foto_url dari Supabase */}
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">{item.foto_url ? <img src={item.foto_url} alt={item.nama_barang} className="w-16 h-16 object-cover rounded-md" /> : <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-md flex items-center justify-center text-slate-400 dark:text-slate-500"><PhotoIcon className="w-8 h-8" /></div>}</td>
-                                                                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-900 dark:text-white font-semibold">{item.nama_barang.toUpperCase()}</p><p className="text-slate-500 dark:text-slate-400">No: {item.nomor}</p><p className="text-slate-500 dark:text-slate-400 text-xs">Kode: {item.kode_barang.toUpperCase()}</p></td>
+                                                                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
+    <Link href={route('inventaris.show', item.id)} className="group">
+        <p className="text-slate-900 dark:text-white font-semibold group-hover:text-green-600 dark:group-hover:text-green-500 transition-colors">{item.nama_barang.toUpperCase()}</p>
+    </Link>
+    <p className="text-slate-500 dark:text-slate-400">No: {item.nomor}</p>
+    <p className="text-slate-500 dark:text-slate-400 text-xs">Kode: {item.kode_barang.toUpperCase()}</p>
+</td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">{(item.spesifikasi || '-').toUpperCase()}</td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300"><p>Total: {item.jumlah}</p><p className="text-xs">Pakai: {item.jumlah_dipakai}</p><p className="text-xs">Rusak: {item.jumlah_rusak}</p></td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300"><p>{item.tempat_pemakaian.toUpperCase()}</p><p className="text-xs">Ruang: {item.nomor_ruang}</p></td>
@@ -464,6 +500,12 @@ export default function Index({ inventarisGrouped, auth }) {
             >
                 Apakah Anda yakin akan menghapus <strong className="font-bold text-slate-800 dark:text-white">{selectedIds.length} data</strong> yang dipilih? Tindakan ini tidak dapat dibatalkan.
             </ConfirmationModal>
+                    <QRScannerModal
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onScanSuccess={handleScanSuccess}
+        />
+
         </AuthenticatedLayout>
     );
 }

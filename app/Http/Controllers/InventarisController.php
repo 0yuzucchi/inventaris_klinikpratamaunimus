@@ -24,6 +24,11 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Codedge\Fpdf\Fpdf\Fpdf; // Pustaka FPDF inti
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+use Endroid\QrCode\Builder\Builder;
+use Endroid\QrCode\Encoding\Encoding;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\Writer\PngWriter;
+
 class InventarisController extends Controller
 {
 
@@ -43,6 +48,21 @@ class InventarisController extends Controller
 
         return Inertia::render('Inventaris/Index', [
             'inventarisGrouped' => $inventarisGrouped,
+            'appUrl' => config('app.url'),
+
+        ]);
+    }
+
+    public function show(Inventaris $inventari)
+    {
+        // Memuat relasi user untuk mendapatkan nama pengunggah
+        // Pastikan model Inventaris memiliki relasi 'user'
+        $inventari->load('user');
+
+        // Inertia akan merender komponen 'Inventaris/DetailBarang'
+        // dan mengirimkan data item inventaris sebagai prop 'inventari'
+        return Inertia::render('Inventaris/DetailBarang', [
+            'inventari' => $inventari
         ]);
     }
 
@@ -179,11 +199,11 @@ class InventarisController extends Controller
             //                        return redirect()->back()->with('error', 'Terjadi kesalahan. Data gagal diduplikasi.');
 
 
-        return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
     }
 
-     public function duplicate(Inventaris $inventari)
+    public function duplicate(Inventaris $inventari)
     {
         try {
             $newItem = $inventari->replicate();
@@ -194,7 +214,6 @@ class InventarisController extends Controller
             $newItem->save();
 
             return redirect()->route('inventaris.index')->with('success', 'Data berhasil diduplikasi.');
-
         } catch (\Exception $e) {
             // Catat error teknis untuk developer
             Log::error('Gagal menduplikasi data inventaris: ' . $e->getMessage());
@@ -266,7 +285,7 @@ class InventarisController extends Controller
                     'apikey' => env('SUPABASE_KEY'),
                     'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
                 ])->attach('file', file_get_contents($file), $fileName)
-                  ->post(env('SUPABASE_URL') . '/storage/v1/object/inventaris-fotos/' . $fileName);
+                    ->post(env('SUPABASE_URL') . '/storage/v1/object/inventaris-fotos/' . $fileName);
 
                 if ($response->failed()) {
                     throw new \Exception('Upload foto baru ke Supabase gagal: ' . $response->body());
@@ -274,16 +293,16 @@ class InventarisController extends Controller
                 $newFotoUrl = env('SUPABASE_URL') . '/storage/v1/object/public/inventaris-fotos/' . $fileName;
                 $validated['foto'] = $newFotoUrl;
             }
-            
+
             if (($newFotoUrl || $request->boolean('remove_foto')) && $inventari->foto) {
-                 $oldFotoPath = str_replace(env('SUPABASE_URL') . '/storage/v1/object/public/', '', $inventari->foto);
+                $oldFotoPath = str_replace(env('SUPABASE_URL') . '/storage/v1/object/public/', '', $inventari->foto);
             }
 
             DB::transaction(function () use ($request, &$validated, $inventari) {
                 if ($request->boolean('remove_foto')) {
                     $validated['foto'] = null;
                 }
-                
+
                 $finalNomor = $this->determineAndValidateId($validated['nama_barang'], 'nomor', 'nama_barang', $inventari->id);
                 $finalNomorRuang = $this->determineAndValidateId($validated['tempat_pemakaian'], 'nomor_ruang', 'tempat_pemakaian', $inventari->id);
                 $validated['nomor'] = $finalNomor;
@@ -293,7 +312,7 @@ class InventarisController extends Controller
                     $validated['kode_barang'] = $inventari->kode_barang ?: 'BRG-' . strtoupper(Str::random(6));
                 }
                 $validated['nama_pengunggah'] = Auth::user()->name;
-                
+
                 if (!$request->hasFile('foto') && !$request->boolean('remove_foto')) {
                     unset($validated['foto']);
                 }
@@ -302,17 +321,16 @@ class InventarisController extends Controller
             });
 
             if ($oldFotoPath) {
-                 Http::withHeaders([
+                Http::withHeaders([
                     'apikey' => env('SUPABASE_KEY'),
                     'Authorization' => 'Bearer ' . env('SUPABASE_KEY'),
                 ])->delete(env('SUPABASE_URL') . '/storage/v1/object/' . $oldFotoPath);
             }
 
             return redirect()->route('inventaris.index')->with('success', 'Data berhasil diperbarui.');
-
         } catch (\Exception $e) {
             Log::error('Update data inventaris gagal: ' . $e->getMessage());
-        return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
     }
 
@@ -368,8 +386,7 @@ class InventarisController extends Controller
                 ->with('success', 'Data inventaris yang dipilih berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Bulk destroy gagal: ' . $e->getMessage());
-                       return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
-
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
     }
 
@@ -452,8 +469,7 @@ class InventarisController extends Controller
             return redirect()->route('inventaris.index')->with('success', 'Data berhasil diperbarui secara massal.');
         } catch (\Exception $e) {
             Log::error('Bulk update gagal: ' . $e->getMessage());
-                       return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
-
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
     }
 
@@ -474,8 +490,7 @@ class InventarisController extends Controller
             return redirect()->route('inventaris.index')->with('success', 'Data berhasil dihapus.');
         } catch (\Exception $e) {
             Log::error('Hapus data gagal: ' . $e->getMessage());
-                       return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
-
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
     }
 
@@ -493,9 +508,73 @@ class InventarisController extends Controller
         return $defaultSize;
     }
 
+        /**
+     * Menghasilkan dan menampilkan PDF label untuk satu item inventaris.
+     * Jumlah label yang dicetak sesuai dengan kuantitas item.
+     *
+     * @param \App\Models\Inventaris $inventari
+     * @return void
+     */
+    public function generateLabel(Inventaris $inventari)
+    {
+        // 1. Inisialisasi FPDF
+        $fpdf = new Fpdf('L', 'mm', [330, 215]); // Ukuran kertas yang sama dengan bulk print
+        $fpdf->SetMargins(5, 5, 5);
+        $fpdf->SetAutoPageBreak(false);
+        $fpdf->AddPage();
+
+        // 2. Pengaturan Grid (sama seperti bulk print untuk konsistensi)
+        $labelWidth = 80;
+        $labelHeight = 40;
+        $pageMargin = 5;
+        $horizontalGap = 1;
+        $verticalGap = 1;
+        $maxCols = 4;
+        $pageHeight = 215;
+        $maxRows = floor(($pageHeight - ($pageMargin * 2) + $verticalGap) / ($labelHeight + $verticalGap));
+
+        $col = 0;
+        $row = 0;
+
+        // 3. Tentukan berapa banyak label yang akan dicetak berdasarkan jumlah item
+        $quantity = $inventari->jumlah > 0 ? $inventari->jumlah : 1;
+
+        // 4. Loop untuk menggambar label sebanyak kuantitasnya
+        for ($i = 0; $i < $quantity; $i++) {
+            // Hitung posisi x dan y untuk label saat ini
+            $x = $pageMargin + ($col * ($labelWidth + $horizontalGap));
+            $y = $pageMargin + ($row * ($labelHeight + $verticalGap));
+
+            // Panggil fungsi yang sudah ada untuk menggambar satu label
+            $this->drawLabel($fpdf, $inventari, $x, $y);
+
+            // Pindah ke kolom berikutnya
+            $col++;
+            // Jika kolom sudah maksimal, reset dan pindah ke baris berikutnya
+            if ($col >= $maxCols) {
+                $col = 0;
+                $row++;
+                // Jika baris sudah maksimal, buat halaman baru
+                if ($row >= $maxRows) {
+                    $row = 0;
+                    $fpdf->AddPage();
+                }
+            }
+        }
+
+        // 5. Output PDF untuk ditampilkan di browser
+        $safeNamaBarang = preg_replace('/[^A-Za-z0-9\-]/', '', $inventari->nama_barang);
+        $fileName = 'label-' . $safeNamaBarang . '-' . $inventari->id . '.pdf';
+        
+        // 'I' artinya Inline (stream/preview) ke browser. 
+        // 'D' artinya Download. 'I' lebih cocok untuk kasus ini.
+        $fpdf->Output('I', $fileName);
+        exit;
+    }
+
     protected function drawLabel(Fpdf $fpdf, Inventaris $item, float $x, float $y)
     {
-        // --- PENGATURAN AWAL & DIMENSI ---
+        // --- PENGATURAN AWAL & DIMENSI (Tidak ada perubahan) ---
         $fpdf->SetFont('Arial', '', 10);
         $fpdf->SetTextColor(0, 0, 0);
         $fpdf->SetDrawColor(0, 0, 0);
@@ -508,7 +587,8 @@ class InventarisController extends Controller
         $infoCellX = $x + $logoCellW;
         $infoCellW = $labelW - $logoCellW;
 
-        // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA ---
+        // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA (Tidak ada perubahan) ---
+        // ... (kode menggambar kotak tetap sama) ...
         $fpdf->Rect($x, $y, $labelW, $labelH);
         $fpdf->Line($x + $logoCellW, $y, $x + $logoCellW, $y + $headerH);
         $fpdf->SetLineWidth(0.4);
@@ -518,7 +598,9 @@ class InventarisController extends Controller
         $titleBoxH = 6;
         $fpdf->Line($infoCellX, $y + $titleBoxH, $x + $labelW, $y + $titleBoxH);
 
-        // --- 2. ISI SEL LOGO (KIRI) ---
+
+        // --- 2. ISI SEL LOGO (KIRI) (Tidak ada perubahan) ---
+        // ... (kode logo tetap sama) ...
         $logoDispHeight = 9;
         $logoTextHeight = 5.5;
         $totalLogoBlockHeight = $logoDispHeight + $logoTextHeight;
@@ -536,12 +618,14 @@ class InventarisController extends Controller
         $fpdf->SetXY($x, $logoStartY + $logoDispHeight);
         $fpdf->MultiCell($logoCellW, 1.8, "INVENTARIS\nKLINIK PRATAMA\nUNIMUS", 0, 'C');
 
-        // --- 3. ISI SEL INFO (KANAN) ---
+
+        // --- 3. ISI SEL INFO (KANAN) (Tidak ada perubahan) ---
+        // ... (kode info pengadaan tetap sama) ...
         $fpdf->SetFont('Arial', 'B', 10);
         $fpdf->SetXY($infoCellX, $y);
         $fpdf->Cell($infoCellW, $titleBoxH, 'PENGADAAN BARANG', 0, 0, 'C');
 
-        $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? '-');
+        $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? 'N/A');
         $unitPengguna = $item->tempat_pemakaian ?: '...';
 
         $yPos1 = $y + $titleBoxH + 1.5;
@@ -561,50 +645,82 @@ class InventarisController extends Controller
         $fpdf->SetXY($fpdf->GetX(), $yPos2);
         $fpdf->Cell(28, 4, $unitPengguna);
 
-        // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI) ---
+        // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI DENGAN QR CODE) ---
+        // ... (kode penempatan teks dan QR tetap sama) ...
         $bodyY = $y + $headerH;
+        $bodyH = $labelH - $headerH;
+        $margin = 1.5;
 
-        // Gambar Kotak Dalam untuk Body TERLEBIH DAHULU
-        $innerBoxMargin = 1.5;
-        $innerBoxY = $bodyY + $innerBoxMargin;
-        $innerBoxX = $x + $innerBoxMargin;
-        $innerBoxW = $labelW - ($innerBoxMargin * 2);
-        $innerBoxH = $labelH - $headerH - ($innerBoxMargin * 2);
-        $fpdf->Rect($innerBoxX, $innerBoxY, $innerBoxW, $innerBoxH);
+        $qrCodeSize = $bodyH - ($margin * 2) - 2;
+        $qrCodeX = $x + $labelW - $qrCodeSize - $margin;
+        $qrCodeY = $bodyY + ($bodyH - $qrCodeSize) / 2;
+        $textBlockW = $labelW - $qrCodeSize - ($margin * 3);
+        $textBlockX = $x + $margin;
 
-        // Teks "Kelompok Barang / Alat" SEKARANG DITEMPATKAN DI DALAM KOTAK
+
+        // ==========================================================
+        // == PERUBAHAN UTAMA ADA DI SINI ==
+        // ==========================================================
+        try {
+            // 1. BUAT URL LENGKAP, sama seperti di frontend
+            // Parameter ketiga (true) membuatnya menjadi URL absolut (http://...)
+            $urlUntukQr = route('inventaris.show', ['inventari' => $item->id], true);
+
+            // 2. Buat QR Code menggunakan Builder dengan data URL
+            $result = Builder::create()
+                ->writer(new PngWriter())
+                ->data($urlUntukQr) // <-- MENGGUNAKAN URL, BUKAN NOMOR PENGADAAN
+                ->encoding(new Encoding('UTF-8'))
+                ->errorCorrectionLevel(ErrorCorrectionLevel::Medium)
+                ->size(200)
+                ->margin(1)
+                ->build();
+
+            $qrCodeString = $result->getString();
+            $qrCodeStream = 'data://image/png;base64,' . base64_encode($qrCodeString);
+
+            // Sisipkan ke PDF
+            $fpdf->Image($qrCodeStream, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
+        } catch (\Exception $e) {
+            // Error handling
+            $fpdf->SetFillColor(230, 230, 230);
+            $fpdf->Rect($qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'F');
+            Log::error('Gagal membuat QR Code Endroid: ' . $e->getMessage());
+        }
+        // ==========================================================
+        // == AKHIR PERUBAHAN ==
+        // ==========================================================
+
+
+        // --- PROSES DATA & PENEMPATAN TEKS (Tidak ada perubahan) ---
+        // ... (semua kode untuk menampilkan nama barang & spesifikasi tetap sama) ...
+        $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
+        $kelompokTextY = $bodyY + $margin + 1;
         $fpdf->SetFont('Arial', '', 7);
-        $fpdf->SetXY($innerBoxX + 1, $innerBoxY + 1); // Posisi relatif terhadap kotak dalam
+        $fpdf->SetXY($textBlockX + 1, $kelompokTextY);
         $fpdf->Cell(40, 3, 'Kelompok Barang / Alat');
-        $kelompokTextHeight = 4; // Ruang vertikal yang digunakan oleh teks ini
-
-        // Ambil data dan hitung font size body
+        $kelompokTextHeight = 4;
         $namaBarang = $item->nama_barang ?? '-';
+        $rawSpek = $item->spesifikasi ?: '...';
+        $parts = explode(',', $rawSpek);
+        if (count($parts) > 3) $rawSpek = implode(',', array_slice($parts, 0, 3));
+        if (strlen($rawSpek) > 80) $rawSpek = substr($rawSpek, 0, 80);
+        $spesifikasi = $rawSpek;
         $fontSizeNama = $this->calculateFontSize($namaBarang, 12, [45 => 8, 30 => 10]);
-        $spesifikasi = $item->spesifikasi ?: '...';
         $fontSizeSpek = $this->calculateFontSize($spesifikasi, 10, [50 => 7, 35 => 8]);
-
-        // Kalkulasi posisi vertikal di dalam SISA RUANG KOTAK DALAM
         $fpdf->SetFont('Arial', 'B', $fontSizeNama);
-        $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $innerBoxW - 4 ? 8 : 4.5;
+        $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $textBlockW - 4 ? 8 : 4.5;
         $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
-        $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $innerBoxW - 4 ? 7 : 4;
-
+        $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $textBlockW - 4 ? 7 : 4;
         $totalTextHeight = $namaBarangHeight + $spesifikasiHeight;
-        // Ruang yang tersedia adalah tinggi kotak dikurangi ruang untuk teks kelompok
-        $availableSpaceForCentering = $innerBoxH - $kelompokTextHeight;
-        // Y awal adalah Y kotak + tinggi teks kelompok + setengah dari sisa ruang
-        $centeredTextStartY = ($innerBoxY + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
-
-        // Cetak Nama Barang
+        $availableSpaceForCentering = $bodyH - ($margin * 2) - $kelompokTextHeight;
+        $centeredTextStartY = ($bodyY + $margin + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
         $fpdf->SetFont('Arial', 'B', $fontSizeNama);
-        $fpdf->SetXY($x, $centeredTextStartY);
-        $fpdf->MultiCell($labelW, 4.5, $namaBarang, 0, 'C');
-
-        // Cetak Spesifikasi
+        $fpdf->SetXY($textBlockX, $centeredTextStartY);
+        $fpdf->MultiCell($textBlockW, 4.5, $namaBarang, 0, 'C');
         $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
-        $fpdf->SetX($x);
-        $fpdf->MultiCell($labelW, 4, $spesifikasi, 0, 'C');
+        $fpdf->SetX($textBlockX);
+        $fpdf->MultiCell($textBlockW, 4, $spesifikasi, 0, 'C');
     }
 
     public function downloadBulkLabels(Request $request)
@@ -619,7 +735,6 @@ class InventarisController extends Controller
 
         if ($selectedItems->isEmpty()) {
             return redirect()->back()->with('error', 'Terjadi kesalahan. Data gagal diduplikasi.');
-
         }
 
         // 2. Duplikasi data
@@ -632,8 +747,7 @@ class InventarisController extends Controller
         }
 
         if ($labelsToPrint->isEmpty()) {
-                       return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
-
+            return redirect()->back()->with('error', 'Terjadi kesalahan pada server. Silakan coba lagi.');
         }
 
         // 3. Inisialisasi FPDF
@@ -956,11 +1070,18 @@ class InventarisController extends Controller
         foreach ($inventaris as $i => $item) {
             // ... [ KODE LOOPING DATA ANDA TETAP SAMA ] ...
             $data = [
-                $i + 1, '', $item->nomor ?? 'N/A', $item->nama_barang ?? '-',
-                $item->kode_barang ?? '-', $item->spesifikasi ?? '-',
-                $item->jenis_perawatan ?? '', $item->jumlah ?? 0,
-                $item->jumlah_dipakai ?? 0, $item->jumlah_rusak ?? '',
-                $item->tempat_pemakaian ?? '-', $item->nomor_ruang ?? '-',
+                $i + 1,
+                '',
+                $item->nomor ?? 'N/A',
+                $item->nama_barang ?? '-',
+                $item->kode_barang ?? '-',
+                $item->spesifikasi ?? '-',
+                $item->jenis_perawatan ?? '',
+                $item->jumlah ?? 0,
+                $item->jumlah_dipakai ?? 0,
+                $item->jumlah_rusak ?? '',
+                $item->tempat_pemakaian ?? '-',
+                $item->nomor_ruang ?? '-',
                 $item->asal_perolehan ?? '-',
                 $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : ''
             ];
@@ -984,7 +1105,7 @@ class InventarisController extends Controller
                 $this->fpdf->Ln();
                 $this->fpdf->SetFont('Arial', '', 7);
             }
-            
+
             $x_pos = $this->fpdf->GetX();
             $y_pos = $this->fpdf->GetY();
             $aligns = ['C', 'C', 'C', 'L', 'L', 'L', 'L', 'C', 'C', 'C', 'L', 'C', 'L', 'C'];
@@ -999,7 +1120,8 @@ class InventarisController extends Controller
                             file_put_contents($imgPath, $imgContents);
                             $this->fpdf->Image($imgPath, $x_pos + 1, $y_pos + 1, $widths[$col] - 2, $rowHeight - 2);
                             unlink($imgPath);
-                        } catch (\Exception $e) {}
+                        } catch (\Exception $e) {
+                        }
                     }
                 } else {
                     if (isset($data[$col])) {
@@ -1028,7 +1150,7 @@ class InventarisController extends Controller
 
         // Sel untuk total 'Jumlah' (indeks 7)
         $this->fpdf->Cell($widths[7], 7, $totalJumlah, 1, 0, 'C', true);
-        
+
         // Sel untuk total 'Pakai' (indeks 8)
         $this->fpdf->Cell($widths[8], 7, $totalDipakai, 1, 0, 'C', true);
 
@@ -1046,201 +1168,200 @@ class InventarisController extends Controller
     }
 
 
-        public function exportPDF(Request $request)
-        {
-            // 1. Mulai dengan query builder
-            $query = Inventaris::query();
-            $titleParts = [];
+    public function exportPDF(Request $request)
+    {
+        // 1. Mulai dengan query builder
+        $query = Inventaris::query();
+        $titleParts = [];
 
-            // ... [ BLOK FILTER ANDA TETAP SAMA, TIDAK ADA PERUBAHAN ] ...
-            if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
-                $startDate = Carbon::parse($request->input('tanggal_mulai'))->isoFormat('D MMMM Y');
-                $endDate = Carbon::parse($request->input('tanggal_selesai'))->isoFormat('D MMMM Y');
+        // ... [ BLOK FILTER ANDA TETAP SAMA, TIDAK ADA PERUBAHAN ] ...
+        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_selesai')) {
+            $startDate = Carbon::parse($request->input('tanggal_mulai'))->isoFormat('D MMMM Y');
+            $endDate = Carbon::parse($request->input('tanggal_selesai'))->isoFormat('D MMMM Y');
 
-                $query->whereBetween('tanggal_masuk', [$request->input('tanggal_mulai'), $request->input('tanggal_selesai')]);
-                $titleParts[] = "Periode {$startDate} - {$endDate}";
-            } else {
-                if ($request->filled('hari')) {
-                    $query->whereDay('tanggal_masuk', $request->input('hari'));
-                    $titleParts[] = 'Tanggal ' . $request->input('hari');
-                }
-                if ($request->filled('bulan')) {
-                    $query->whereMonth('tanggal_masuk', $request->input('bulan'));
-                    $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->isoFormat('MMMM');
-                }
-                if ($request->filled('tahun')) {
-                    $query->whereYear('tanggal_masuk', $request->input('tahun'));
-                    $titleParts[] = 'Tahun ' . $request->input('tahun');
-                }
+            $query->whereBetween('tanggal_masuk', [$request->input('tanggal_mulai'), $request->input('tanggal_selesai')]);
+            $titleParts[] = "Periode {$startDate} - {$endDate}";
+        } else {
+            if ($request->filled('hari')) {
+                $query->whereDay('tanggal_masuk', $request->input('hari'));
+                $titleParts[] = 'Tanggal ' . $request->input('hari');
             }
-
-            if (empty($titleParts)) {
-                $title = 'Laporan Keseluruhan Inventaris';
-            } else {
-                $title = 'Laporan Inventaris ' . implode(', ', array_reverse($titleParts));
+            if ($request->filled('bulan')) {
+                $query->whereMonth('tanggal_masuk', $request->input('bulan'));
+                $titleParts[] = 'Bulan ' . Carbon::create()->month($request->input('bulan'))->isoFormat('MMMM');
             }
-
-            // 5. Eksekusi query
-            $inventaris = $query->orderBy('nomor', 'asc')->get();
-
-            // ========================================================================
-            // == BARU: HITUNG TOTAL UNTUK BARIS TERAKHIR ==
-            // ========================================================================
-            $totalJumlah = $inventaris->sum('jumlah');
-            $totalDipakai = $inventaris->sum('jumlah_dipakai');
-            $totalRusak = $inventaris->sum('jumlah_rusak');
-
-
-            // --- Dari sini ke bawah, kode rendering FPDF tetap sama ---
-            $this->fpdf->AddPage('L', 'A4'); // Set ke Landscape dan A4
-            $this->fpdf->SetFont('Arial', 'B', 16);
-
-            // Header Dokumen
-            // ... [ KODE HEADER DOKUMEN ANDA TETAP SAMA ] ...
-            try {
-                $logoPath = public_path('images/logoklinik.png');
-                if (file_exists($logoPath)) {
-                    $this->fpdf->Image($logoPath, 10, 8, 25);
-                }
-            } catch (\Exception $e) {
+            if ($request->filled('tahun')) {
+                $query->whereYear('tanggal_masuk', $request->input('tahun'));
+                $titleParts[] = 'Tahun ' . $request->input('tahun');
             }
-            
-            $this->fpdf->SetX(40);
-            $this->fpdf->Cell(220, 8, 'KLINIK PRATAMA UNIMUS', 0, 1, 'C');
-            $this->fpdf->SetFont('Arial', '', 10);
-            $this->fpdf->SetX(40);
-            $this->fpdf->Cell(220, 6, 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang', 0, 1, 'C');
-            $this->fpdf->SetX(40);
-            $this->fpdf->Cell(220, 6, 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id', 0, 1, 'C');
-            $this->fpdf->Ln(5);
-            $this->fpdf->Line(10, 38, 287, 38);
-            $this->fpdf->Ln(5);
-            
-            $this->fpdf->SetFont('Arial', 'B', 12);
-            $this->fpdf->Cell(0, 10, $title, 0, 1, 'C');
-            $this->fpdf->Ln(2);
-
-            // Header Tabel
-            $this->fpdf->SetFont('Arial', 'B', 8);
-            $this->fpdf->SetFillColor(242, 242, 242);
-            $widths = [8, 15, 20, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 25]; // Sesuaikan lebar agar pas di A4 Landscape
-            $headers = ['No.', 'Foto', 'Nomor', 'Nama Barang', 'Kode', 'Spesifikasi', 'Perawatan', 'Total', 'Pakai', 'Rusak', 'Pemakaian', 'No. Ruang', 'Asal', 'Tgl Masuk'];
-            for ($i = 0; $i < count($headers); $i++) {
-                $this->fpdf->Cell($widths[$i], 7, $headers[$i], 1, 0, 'C', true);
-            }
-            $this->fpdf->Ln();
-
-            // Isi Tabel (tidak ada perubahan di sini)
-            $this->fpdf->SetFont('Arial', '', 7);
-            $lineHeight = 5;
-            $imageCellHeight = 15;
-            $bottomMargin = 20;
-
-            foreach ($inventaris as $i => $item) {
-                // ... [ KODE LOOPING DATA ANDA TETAP SAMA ] ...
-                $data = [
-                    $i + 1,
-                    '',
-                    $item->nomor ?? 'N/A',
-                    $item->nama_barang ?? '-',
-                    $item->kode_barang ?? '-',
-                    $item->spesifikasi ?? '-',
-                    $item->jenis_perawatan ?? '',
-                    $item->jumlah ?? 0,
-                    $item->jumlah_dipakai ?? 0,
-                    $item->jumlah_rusak ?? '',
-                    $item->tempat_pemakaian ?? '-',
-                    $item->nomor_ruang ?? '-',
-                    $item->asal_perolehan ?? '-',
-                    $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : ''
-                ];
-
-                $nb = 0;
-                for ($col = 2; $col < count($data); $col++) {
-                    if (isset($data[$col])) {
-                        $nb = max($nb, $this->NbLines($widths[$col], (string)$data[$col]));
-                    }
-                }
-                $textRowHeight = $nb * $lineHeight;
-                $rowHeight = max($textRowHeight, $imageCellHeight);
-
-                if ($this->fpdf->GetY() + $rowHeight > ($this->fpdf->GetPageHeight() - $bottomMargin)) {
-                    $this->fpdf->AddPage('L', 'A4'); // Pastikan halaman baru juga landscape
-                    $this->fpdf->SetFont('Arial', 'B', 8);
-                    $this->fpdf->SetFillColor(242, 242, 242);
-                    for ($h = 0; $h < count($headers); $h++) {
-                        $this->fpdf->Cell($widths[$h], 7, $headers[$h], 1, 0, 'C', true);
-                    }
-                    $this->fpdf->Ln();
-                    $this->fpdf->SetFont('Arial', '', 7);
-                }
-
-                $x_pos = $this->fpdf->GetX();
-                $y_pos = $this->fpdf->GetY();
-                $aligns = ['C', 'C', 'C', 'L', 'L', 'L', 'L', 'C', 'C', 'C', 'L', 'C', 'L', 'C'];
-
-                for ($col = 0; $col < count($data); $col++) {
-                    $this->fpdf->Rect($x_pos, $y_pos, $widths[$col], $rowHeight);
-                    if ($col === 1) {
-                        if (isset($item->foto_url) && $item->foto_url) {
-                            try {
-                                $imgContents = Http::timeout(5)->get($item->foto_url)->body();
-                                $imgPath = tempnam(sys_get_temp_dir(), 'inv') . '.jpg';
-                                file_put_contents($imgPath, $imgContents);
-                                $this->fpdf->Image($imgPath, $x_pos + 1, $y_pos + 1, $widths[$col] - 2, $rowHeight - 2);
-                                unlink($imgPath);
-                            } catch (\Exception $e) {
-                            }
-                        }
-                    } else {
-                        if (isset($data[$col])) {
-                            $nbLines = $this->NbLines($widths[$col], (string)$data[$col]);
-                            $textHeight = $nbLines * $lineHeight;
-                            $yOffset = ($rowHeight - $textHeight) / 2;
-                            $this->fpdf->SetXY($x_pos, $y_pos + $yOffset);
-                            $this->fpdf->MultiCell($widths[$col], $lineHeight, (string)$data[$col], 0, $aligns[$col]);
-                        }
-                    }
-                    $x_pos += $widths[$col];
-                    $this->fpdf->SetXY($x_pos, $y_pos);
-                }
-                $this->fpdf->Ln($rowHeight);
-            }
-
-            // ========================================================================
-            // == BARU: BLOK UNTUK MENAMBAHKAN BARIS TOTAL DI PDF ==
-            // ========================================================================
-            $this->fpdf->SetFont('Arial', 'B', 8); // Set font tebal untuk total
-            $this->fpdf->SetFillColor(220, 220, 220); // Warna abu-abu yang sedikit berbeda
-
-            // Gabungkan sel untuk label "Total Keseluruhan" (dari No. sampai Perawatan)
-            // Indeks 0 sampai 6 di array $widths
-            $labelWidth = 0;
-            for ($i = 0; $i <= 6; $i++) {
-                $labelWidth += $widths[$i];
-            }
-            $this->fpdf->Cell($labelWidth, 7, 'Total Keseluruhan', 1, 0, 'R', true);
-
-            // Sel untuk total 'Jumlah' (indeks 7)
-            $this->fpdf->Cell($widths[7], 7, $totalJumlah, 1, 0, 'C', true);
-            
-            // Sel untuk total 'Pakai' (indeks 8)
-            $this->fpdf->Cell($widths[8], 7, $totalDipakai, 1, 0, 'C', true);
-
-            // Sel untuk total 'Rusak' (indeks 9)
-            $this->fpdf->Cell($widths[9], 7, $totalRusak, 1, 0, 'C', true);
-
-            // Gabungkan sel sisa di sebelah kanan agar border tetap utuh dan rapi
-            $remainingWidth = 0;
-            for ($i = 10; $i < count($widths); $i++) {
-                $remainingWidth += $widths[$i];
-            }
-            // Parameter terakhir '1' untuk pindah baris setelah cell ini digambar
-            $this->fpdf->Cell($remainingWidth, 7, '', 1, 1, 'C', true);
-
-            $fileName = 'laporan-inventaris-' . date('Ymd') . '.pdf';
-            $this->fpdf->Output('D', $fileName);
-            exit;
         }
 
+        if (empty($titleParts)) {
+            $title = 'Laporan Keseluruhan Inventaris';
+        } else {
+            $title = 'Laporan Inventaris ' . implode(', ', array_reverse($titleParts));
+        }
+
+        // 5. Eksekusi query
+        $inventaris = $query->orderBy('nomor', 'asc')->get();
+
+        // ========================================================================
+        // == BARU: HITUNG TOTAL UNTUK BARIS TERAKHIR ==
+        // ========================================================================
+        $totalJumlah = $inventaris->sum('jumlah');
+        $totalDipakai = $inventaris->sum('jumlah_dipakai');
+        $totalRusak = $inventaris->sum('jumlah_rusak');
+
+
+        // --- Dari sini ke bawah, kode rendering FPDF tetap sama ---
+        $this->fpdf->AddPage('L', 'A4'); // Set ke Landscape dan A4
+        $this->fpdf->SetFont('Arial', 'B', 16);
+
+        // Header Dokumen
+        // ... [ KODE HEADER DOKUMEN ANDA TETAP SAMA ] ...
+        try {
+            $logoPath = public_path('images/logoklinik.png');
+            if (file_exists($logoPath)) {
+                $this->fpdf->Image($logoPath, 10, 8, 25);
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 8, 'KLINIK PRATAMA UNIMUS', 0, 1, 'C');
+        $this->fpdf->SetFont('Arial', '', 10);
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Jl. Petek Kp. Gayamsari RT. 02 RW. 06, Dadapsari, Semarang Utara, Semarang', 0, 1, 'C');
+        $this->fpdf->SetX(40);
+        $this->fpdf->Cell(220, 6, 'Telp. 0895-6168-33383, e-mail: klinikpratamarawatinap@unimus.ac.id', 0, 1, 'C');
+        $this->fpdf->Ln(5);
+        $this->fpdf->Line(10, 38, 287, 38);
+        $this->fpdf->Ln(5);
+
+        $this->fpdf->SetFont('Arial', 'B', 12);
+        $this->fpdf->Cell(0, 10, $title, 0, 1, 'C');
+        $this->fpdf->Ln(2);
+
+        // Header Tabel
+        $this->fpdf->SetFont('Arial', 'B', 8);
+        $this->fpdf->SetFillColor(242, 242, 242);
+        $widths = [8, 15, 20, 30, 20, 45, 20, 10, 10, 10, 22, 22, 20, 25]; // Sesuaikan lebar agar pas di A4 Landscape
+        $headers = ['No.', 'Foto', 'Nomor', 'Nama Barang', 'Kode', 'Spesifikasi', 'Perawatan', 'Total', 'Pakai', 'Rusak', 'Pemakaian', 'No. Ruang', 'Asal', 'Tgl Masuk'];
+        for ($i = 0; $i < count($headers); $i++) {
+            $this->fpdf->Cell($widths[$i], 7, $headers[$i], 1, 0, 'C', true);
+        }
+        $this->fpdf->Ln();
+
+        // Isi Tabel (tidak ada perubahan di sini)
+        $this->fpdf->SetFont('Arial', '', 7);
+        $lineHeight = 5;
+        $imageCellHeight = 15;
+        $bottomMargin = 20;
+
+        foreach ($inventaris as $i => $item) {
+            // ... [ KODE LOOPING DATA ANDA TETAP SAMA ] ...
+            $data = [
+                $i + 1,
+                '',
+                $item->nomor ?? 'N/A',
+                $item->nama_barang ?? '-',
+                $item->kode_barang ?? '-',
+                $item->spesifikasi ?? '-',
+                $item->jenis_perawatan ?? '',
+                $item->jumlah ?? 0,
+                $item->jumlah_dipakai ?? 0,
+                $item->jumlah_rusak ?? '',
+                $item->tempat_pemakaian ?? '-',
+                $item->nomor_ruang ?? '-',
+                $item->asal_perolehan ?? '-',
+                $item->tanggal_masuk ? Carbon::parse($item->tanggal_masuk)->format('d-m-Y') : ''
+            ];
+
+            $nb = 0;
+            for ($col = 2; $col < count($data); $col++) {
+                if (isset($data[$col])) {
+                    $nb = max($nb, $this->NbLines($widths[$col], (string)$data[$col]));
+                }
+            }
+            $textRowHeight = $nb * $lineHeight;
+            $rowHeight = max($textRowHeight, $imageCellHeight);
+
+            if ($this->fpdf->GetY() + $rowHeight > ($this->fpdf->GetPageHeight() - $bottomMargin)) {
+                $this->fpdf->AddPage('L', 'A4'); // Pastikan halaman baru juga landscape
+                $this->fpdf->SetFont('Arial', 'B', 8);
+                $this->fpdf->SetFillColor(242, 242, 242);
+                for ($h = 0; $h < count($headers); $h++) {
+                    $this->fpdf->Cell($widths[$h], 7, $headers[$h], 1, 0, 'C', true);
+                }
+                $this->fpdf->Ln();
+                $this->fpdf->SetFont('Arial', '', 7);
+            }
+
+            $x_pos = $this->fpdf->GetX();
+            $y_pos = $this->fpdf->GetY();
+            $aligns = ['C', 'C', 'C', 'L', 'L', 'L', 'L', 'C', 'C', 'C', 'L', 'C', 'L', 'C'];
+
+            for ($col = 0; $col < count($data); $col++) {
+                $this->fpdf->Rect($x_pos, $y_pos, $widths[$col], $rowHeight);
+                if ($col === 1) {
+                    if (isset($item->foto_url) && $item->foto_url) {
+                        try {
+                            $imgContents = Http::timeout(5)->get($item->foto_url)->body();
+                            $imgPath = tempnam(sys_get_temp_dir(), 'inv') . '.jpg';
+                            file_put_contents($imgPath, $imgContents);
+                            $this->fpdf->Image($imgPath, $x_pos + 1, $y_pos + 1, $widths[$col] - 2, $rowHeight - 2);
+                            unlink($imgPath);
+                        } catch (\Exception $e) {
+                        }
+                    }
+                } else {
+                    if (isset($data[$col])) {
+                        $nbLines = $this->NbLines($widths[$col], (string)$data[$col]);
+                        $textHeight = $nbLines * $lineHeight;
+                        $yOffset = ($rowHeight - $textHeight) / 2;
+                        $this->fpdf->SetXY($x_pos, $y_pos + $yOffset);
+                        $this->fpdf->MultiCell($widths[$col], $lineHeight, (string)$data[$col], 0, $aligns[$col]);
+                    }
+                }
+                $x_pos += $widths[$col];
+                $this->fpdf->SetXY($x_pos, $y_pos);
+            }
+            $this->fpdf->Ln($rowHeight);
+        }
+
+        // ========================================================================
+        // == BARU: BLOK UNTUK MENAMBAHKAN BARIS TOTAL DI PDF ==
+        // ========================================================================
+        $this->fpdf->SetFont('Arial', 'B', 8); // Set font tebal untuk total
+        $this->fpdf->SetFillColor(220, 220, 220); // Warna abu-abu yang sedikit berbeda
+
+        // Gabungkan sel untuk label "Total Keseluruhan" (dari No. sampai Perawatan)
+        // Indeks 0 sampai 6 di array $widths
+        $labelWidth = 0;
+        for ($i = 0; $i <= 6; $i++) {
+            $labelWidth += $widths[$i];
+        }
+        $this->fpdf->Cell($labelWidth, 7, 'Total Keseluruhan', 1, 0, 'R', true);
+
+        // Sel untuk total 'Jumlah' (indeks 7)
+        $this->fpdf->Cell($widths[7], 7, $totalJumlah, 1, 0, 'C', true);
+
+        // Sel untuk total 'Pakai' (indeks 8)
+        $this->fpdf->Cell($widths[8], 7, $totalDipakai, 1, 0, 'C', true);
+
+        // Sel untuk total 'Rusak' (indeks 9)
+        $this->fpdf->Cell($widths[9], 7, $totalRusak, 1, 0, 'C', true);
+
+        // Gabungkan sel sisa di sebelah kanan agar border tetap utuh dan rapi
+        $remainingWidth = 0;
+        for ($i = 10; $i < count($widths); $i++) {
+            $remainingWidth += $widths[$i];
+        }
+        // Parameter terakhir '1' untuk pindah baris setelah cell ini digambar
+        $this->fpdf->Cell($remainingWidth, 7, '', 1, 1, 'C', true);
+
+        $fileName = 'laporan-inventaris-' . date('Ymd') . '.pdf';
+        $this->fpdf->Output('D', $fileName);
+        exit;
+    }
 }
