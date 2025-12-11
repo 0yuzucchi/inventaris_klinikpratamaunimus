@@ -27,7 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
-use Endroid\QrCode\Writer\PngWriter;    
+use Endroid\QrCode\Writer\PngWriter;
 
 class InventarisController extends Controller
 {
@@ -647,40 +647,41 @@ class InventarisController extends Controller
     $textBlockX = $x + $margin;
 
     // ==========================================================
-    // == PERUBAHAN UTAMA UNTUK KOMPATIBILITAS LOKAL & VERCEL ==
+    // == SOLUSI FINAL: API EKSTERNAL + FILE TEMPORER ==
     // ==========================================================
     $qrCodePath = null;
     try {
+        // 1. Buat URL data untuk QR Code
         $urlUntukQr = route('inventaris.show', ['inventari' => $item->id], true);
+        
+        // 2. Buat URL untuk memanggil API QR Server
+        $qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?data=' . urlencode($urlUntukQr) . '&size=200x200&margin=1&ecc=M';
 
-        $result = Builder::create()
-            ->writer(new PngWriter())
-            ->data($urlUntukQr)
-            ->encoding(new Encoding('UTF-8'))
-            ->errorCorrectionLevel(ErrorCorrectionLevel::Medium)
-            ->size(200)
-            ->margin(1)
-            ->build();
+        // 3. Panggil API dan dapatkan konten gambar
+        $response = Http::get($qrApiUrl);
 
-        // 1. Gunakan fungsi PHP untuk mendapatkan direktori temporary yang sesuai dengan OS
-        $tempDir = sys_get_temp_dir();
-
-        // 2. Buat path file yang unik di direktori temporary tersebut
-        // DIRECTORY_SEPARATOR akan otomatis menjadi '\' di Windows dan '/' di Linux
-        $qrCodePath = $tempDir . DIRECTORY_SEPARATOR . 'qr_' . uniqid() . '.png';
-
-        // 3. Simpan QR code sebagai file gambar sementara
-        $result->saveToFile($qrCodePath);
-
-        // 4. Sisipkan gambar dari file yang sudah disimpan ke PDF
-        $fpdf->Image($qrCodePath, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
-
+        if ($response->successful()) {
+            // 4. Dapatkan direktori temporer yang sesuai dengan OS (Windows/Linux)
+            $tempDir = sys_get_temp_dir();
+            // 5. Buat path file yang unik di direktori tersebut
+            $qrCodePath = $tempDir . DIRECTORY_SEPARATOR . 'qr_' . uniqid() . '.png';
+            
+            // 6. Simpan konten gambar dari API ke file temporer
+            file_put_contents($qrCodePath, $response->body());
+            
+            // 7. Masukkan gambar ke FPDF dari PATH FILE yang baru dibuat
+            $fpdf->Image($qrCodePath, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
+            
+        } else {
+            throw new \Exception("Gagal mengambil QR dari API.");
+        }
     } catch (\Exception $e) {
+        // Fallback jika terjadi error
         $fpdf->SetFillColor(230, 230, 230);
         $fpdf->Rect($qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'F');
-        Log::error('Gagal membuat QR Code Endroid: ' . $e->getMessage());
+        Log::error('Gagal membuat QR Code: ' . $e->getMessage());
     } finally {
-        // 5. (Penting!) Hapus file sementara setelah digunakan
+        // 8. (SANGAT PENTING!) Hapus file temporer setelah digunakan
         if ($qrCodePath && file_exists($qrCodePath)) {
             unlink($qrCodePath);
         }
@@ -688,7 +689,6 @@ class InventarisController extends Controller
     // ==========================================================
     // == AKHIR PERUBAHAN ==
     // ==========================================================
-
 
     // --- PROSES DATA & PENEMPATAN TEKS (Tidak ada perubahan) ---
     $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
