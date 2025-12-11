@@ -574,7 +574,7 @@ class InventarisController extends Controller
 
     protected function drawLabel(Fpdf $fpdf, Inventaris $item, float $x, float $y)
 {
-    // --- PENGATURAN AWAL & DIMENSI (Tidak ada perubahan) ---
+    // --- PENGATURAN AWAL & DIMENSI (Sesuai kode request) ---
     $fpdf->SetFont('Arial', '', 10);
     $fpdf->SetTextColor(0, 0, 0);
     $fpdf->SetDrawColor(0, 0, 0);
@@ -587,7 +587,7 @@ class InventarisController extends Controller
     $infoCellX = $x + $logoCellW;
     $infoCellW = $labelW - $logoCellW;
 
-    // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA (Tidak ada perubahan) ---
+    // --- 1. GAMBAR SEMUA GARIS DAN KOTAK UTAMA (Sesuai kode request) ---
     $fpdf->Rect($x, $y, $labelW, $labelH);
     $fpdf->Line($x + $logoCellW, $y, $x + $logoCellW, $y + $headerH);
     $fpdf->SetLineWidth(0.4);
@@ -597,7 +597,7 @@ class InventarisController extends Controller
     $titleBoxH = 6;
     $fpdf->Line($infoCellX, $y + $titleBoxH, $x + $labelW, $y + $titleBoxH);
 
-    // --- 2. ISI SEL LOGO (KIRI) (Tidak ada perubahan) ---
+    // --- 2. ISI SEL LOGO (KIRI) (Sesuai kode request) ---
     $logoDispHeight = 9;
     $logoTextHeight = 5.5;
     $totalLogoBlockHeight = $logoDispHeight + $logoTextHeight;
@@ -615,20 +615,24 @@ class InventarisController extends Controller
     $fpdf->SetXY($x, $logoStartY + $logoDispHeight);
     $fpdf->MultiCell($logoCellW, 1.8, "INVENTARIS\nKLINIK PRATAMA\nUNIMUS", 0, 'C');
 
-    // --- 3. ISI SEL INFO (KANAN) (Tidak ada perubahan) ---
+    // --- 3. ISI SEL INFO (KANAN) (Sesuai kode request) ---
     $fpdf->SetFont('Arial', 'B', 10);
     $fpdf->SetXY($infoCellX, $y);
     $fpdf->Cell($infoCellW, $titleBoxH, 'PENGADAAN BARANG', 0, 0, 'C');
+
     $nomorPengadaan = $item->nomor_pengadaan_lengkap ?? ($item->kode_barang ?? 'N/A');
     $unitPengguna = $item->tempat_pemakaian ?: '...';
+
     $yPos1 = $y + $titleBoxH + 1.5;
     $yPos2 = $y + $titleBoxH + 5.5;
+
     $fpdf->SetFont('Arial', '', 7);
     $fpdf->SetXY($infoCellX + 1, $yPos1);
     $fpdf->Cell(22, 4, 'NO. PENGADAAN:');
     $fpdf->SetFont('Arial', 'B', 11);
     $fpdf->SetXY($fpdf->GetX(), $yPos1);
     $fpdf->Cell(28, 4, $nomorPengadaan);
+
     $fpdf->SetFont('Arial', '', 7);
     $fpdf->SetXY($infoCellX + 1, $yPos2);
     $fpdf->Cell(22, 4, 'UNIT PENGGUNA:');
@@ -636,85 +640,104 @@ class InventarisController extends Controller
     $fpdf->SetXY($fpdf->GetX(), $yPos2);
     $fpdf->Cell(28, 4, $unitPengguna);
 
-    // --- 4. ISI BAGIAN BODY (LOGIKA DIPERBARUI DENGAN QR CODE) ---
+    // --- 4. ISI BAGIAN BODY (Layout Sesuai Request, Logika QR Pakai API) ---
     $bodyY = $y + $headerH;
     $bodyH = $labelH - $headerH;
     $margin = 1.5;
+
+    // Kalkulasi posisi QR Code (Sesuai layout request)
     $qrCodeSize = $bodyH - ($margin * 2) - 2;
     $qrCodeX = $x + $labelW - $qrCodeSize - $margin;
     $qrCodeY = $bodyY + ($bodyH - $qrCodeSize) / 2;
+    
+    // Kalkulasi area teks (Sesuai layout request)
     $textBlockW = $labelW - $qrCodeSize - ($margin * 3);
     $textBlockX = $x + $margin;
 
     // ==========================================================
-    // == SOLUSI FINAL: API EKSTERNAL + FILE TEMPORER ==
+    // == LOGIKA QR CODE (MENGGUNAKAN API AGAR JALAN DI VERCEL) ==
     // ==========================================================
     $qrCodePath = null;
     try {
-        // 1. Buat URL data untuk QR Code
+        // 1. URL Data
         $urlUntukQr = route('inventaris.show', ['inventari' => $item->id], true);
         
-        // 2. Buat URL untuk memanggil API QR Server
+        // 2. URL API
         $qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?data=' . urlencode($urlUntukQr) . '&size=200x200&margin=1&ecc=M';
 
-        // 3. Panggil API dan dapatkan konten gambar
+        // 3. Request ke API
         $response = Http::get($qrApiUrl);
 
         if ($response->successful()) {
-            // 4. Dapatkan direktori temporer yang sesuai dengan OS (Windows/Linux)
+            // 4. Simpan ke Temp File (Penting untuk Vercel & FPDF)
             $tempDir = sys_get_temp_dir();
-            // 5. Buat path file yang unik di direktori tersebut
             $qrCodePath = $tempDir . DIRECTORY_SEPARATOR . 'qr_' . uniqid() . '.png';
             
-            // 6. Simpan konten gambar dari API ke file temporer
             file_put_contents($qrCodePath, $response->body());
             
-            // 7. Masukkan gambar ke FPDF dari PATH FILE yang baru dibuat
+            // 5. Masukkan ke PDF menggunakan koordinat layout yang diminta
             $fpdf->Image($qrCodePath, $qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'PNG');
             
         } else {
             throw new \Exception("Gagal mengambil QR dari API.");
         }
     } catch (\Exception $e) {
-        // Fallback jika terjadi error
+        // Kotak abu-abu jika error
         $fpdf->SetFillColor(230, 230, 230);
         $fpdf->Rect($qrCodeX, $qrCodeY, $qrCodeSize, $qrCodeSize, 'F');
-        Log::error('Gagal membuat QR Code: ' . $e->getMessage());
+        Log::error('QR Error: ' . $e->getMessage());
     } finally {
-        // 8. (SANGAT PENTING!) Hapus file temporer setelah digunakan
+        // 6. Bersihkan file
         if ($qrCodePath && file_exists($qrCodePath)) {
             unlink($qrCodePath);
         }
     }
     // ==========================================================
-    // == AKHIR PERUBAHAN ==
+    // == AKHIR LOGIKA QR ==
     // ==========================================================
 
-    // --- PROSES DATA & PENEMPATAN TEKS (Tidak ada perubahan) ---
-    $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
+    // --- PROSES DATA & PENEMPATAN TEKS (Sesuai kode request) ---
+    // Kotak pembatas body (opsional, untuk debugging layout)
+    // $fpdf->Rect($x + $margin, $bodyY + $margin, $labelW - ($margin * 2), $bodyH - ($margin * 2));
+
     $kelompokTextY = $bodyY + $margin + 1;
     $fpdf->SetFont('Arial', '', 7);
     $fpdf->SetXY($textBlockX + 1, $kelompokTextY);
     $fpdf->Cell(40, 3, 'Kelompok Barang / Alat');
+    
     $kelompokTextHeight = 4;
     $namaBarang = $item->nama_barang ?? '-';
     $rawSpek = $item->spesifikasi ?: '...';
+    
+    // Potong spesifikasi jika terlalu panjang
     $parts = explode(',', $rawSpek);
     if (count($parts) > 3) $rawSpek = implode(',', array_slice($parts, 0, 3));
     if (strlen($rawSpek) > 80) $rawSpek = substr($rawSpek, 0, 80);
     $spesifikasi = $rawSpek;
+
+    // Hitung ukuran font dinamis
     $fontSizeNama = $this->calculateFontSize($namaBarang, 12, [45 => 8, 30 => 10]);
     $fontSizeSpek = $this->calculateFontSize($spesifikasi, 10, [50 => 7, 35 => 8]);
+
+    // Hitung tinggi blok teks
     $fpdf->SetFont('Arial', 'B', $fontSizeNama);
     $namaBarangHeight = $fpdf->GetStringWidth($namaBarang) > $textBlockW - 4 ? 8 : 4.5;
+    
     $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
     $spesifikasiHeight = $fpdf->GetStringWidth($spesifikasi) > $textBlockW - 4 ? 7 : 4;
+    
     $totalTextHeight = $namaBarangHeight + $spesifikasiHeight;
     $availableSpaceForCentering = $bodyH - ($margin * 2) - $kelompokTextHeight;
+    
+    // Posisi vertikal teks (centering)
     $centeredTextStartY = ($bodyY + $margin + $kelompokTextHeight) + ($availableSpaceForCentering - $totalTextHeight) / 2;
+
+    // Tampilkan Nama Barang
     $fpdf->SetFont('Arial', 'B', $fontSizeNama);
     $fpdf->SetXY($textBlockX, $centeredTextStartY);
     $fpdf->MultiCell($textBlockW, 4.5, $namaBarang, 0, 'C');
+
+    // Tampilkan Spesifikasi
     $fpdf->SetFont('Arial', 'B', $fontSizeSpek);
     $fpdf->SetX($textBlockX);
     $fpdf->MultiCell($textBlockW, 4, $spesifikasi, 0, 'C');
