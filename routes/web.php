@@ -31,6 +31,12 @@ Route::get('/inventaris/{inventari}', [InventarisController::class, 'show'])
     ->name('inventaris.show')
     ->whereNumber('inventari'); 
 
+    
+
+        Route::get('/inventaris/{inventari}', [InventarisController::class, 'show'])
+            ->name('inventaris.show')
+            ->whereNumber('inventari');
+
 // --- GRUP RUTE YANG MEMERLUKAN OTENTIKASI ---
 Route::middleware(['auth', 'verified'])->group(function () {
     // Rute Manajemen Profil
@@ -102,10 +108,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('/inventaris', [InventarisController::class, 'index'])
             ->name('inventaris.index');
-
-        Route::get('/inventaris/{inventari}', [InventarisController::class, 'show'])
-            ->name('inventaris.show')
-            ->whereNumber('inventari');
 
         Route::prefix('inventaris')->name('inventaris.')->group(function () {
             Route::get('/print', [InventarisController::class, 'print'])->name('print');
