@@ -29,15 +29,8 @@
 
         "CACHE_DRIVER": "array",
         "LOG_CHANNEL": "stderr",
-        "SESSION_DRIVER": "cookie",
+        "SESSION_DRIVER": "cookie"
 
-        "APP_KEY": "@app_key",
-        "DB_CONNECTION": "@db_connection",
-        "DB_HOST": "@db_host",
-        "DB_PORT": "@db_port",
-        "DB_DATABASE": "@db_database",
-        "DB_USERNAME": "@db_username",
-        "DB_PASSWORD": "@db_password",
-        "GEMINI_API_KEY": "@gemini_api_key"
+
     }
 }

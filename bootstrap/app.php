@@ -5,7 +5,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\CheckRole; // <--- Import middleware tadi
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\HandleInertiaRequests; // <--- TAMBAHKAN BARIS INI
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,15 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRole::class,
         ]);
 
+        // Daftarkan semua middleware web di satu tempat agar rapi
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
+            HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
-                $middleware->web(append: [
-            HandleInertiaRequests::class,
-        ]);
+
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
-
