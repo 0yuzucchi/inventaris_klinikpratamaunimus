@@ -4,8 +4,8 @@
     "functions": {
         "api/index.php": {
             "runtime": "vercel-php@0.7.1",
-            "maxDuration": 30,
-            "memory": 1024
+            "maxDuration": 120,
+            "memory": 2048
         }
     },
     "routes": [
