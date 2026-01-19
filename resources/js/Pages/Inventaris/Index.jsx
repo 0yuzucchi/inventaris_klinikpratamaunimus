@@ -105,12 +105,12 @@ const InventarisCard = ({ item, formatDate, formatCurrency, deleteHandler, isSel
             <div className="flex-grow">
                 <Link href={route('inventaris.show', item.id)} className="group">
                     <p className="font-bold text-lg text-slate-800 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-500 transition-colors">
-                        {(item.nama_barang || '').toUpperCase()}
+                        {item.display_nama_barang.toUpperCase()}
                     </p>
                 </Link>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                    No: <span className="font-medium text-slate-600 dark:text-slate-300">{item.nomor || 'N/A'}</span> /
-                    Kode: <span className="font-medium text-slate-600 dark:text-slate-300">{(item.kode_barang || 'N/A').toUpperCase()}</span>
+                    No: <span className="font-medium text-slate-600 dark:text-slate-300">{item.display_nomor_barang}</span> /
+                    Kode: <span className="font-medium text-slate-600 dark:text-slate-300">{(item.master_barang?.kategori?.nama || 'N/A').toUpperCase()}</span>
                 </p>
                 <p className="text-base font-semibold text-green-700 dark:text-green-500 mt-1">
                     {formatCurrency(item.harga)}
@@ -124,7 +124,9 @@ const InventarisCard = ({ item, formatDate, formatCurrency, deleteHandler, isSel
             </div>
             <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Tempat (Ruang)</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{(item.tempat_pemakaian || '').toUpperCase()} ({item.nomor_ruang || 'N/A'})</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {item.display_ruangan.toUpperCase()} ({item.display_nomor_ruang || 'N/A'})
+                </p>
             </div>
             <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Tgl. Masuk</p>
@@ -132,11 +134,13 @@ const InventarisCard = ({ item, formatDate, formatCurrency, deleteHandler, isSel
             </div>
             <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Asal</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{(item.asal_perolehan || '').toUpperCase()}</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                {item.display_asal?.toUpperCase() || '-'}
+                </p>
             </div>
             <div className="col-span-2">
                 <p className="text-xs text-slate-500 dark:text-slate-400">Diunggah Oleh</p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.nama_pengunggah || 'N/A'}</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">  {item.user?.name ?? 'N/A'}</p>
             </div>
         </div>
         <div className="p-3 bg-slate-50 dark:bg-slate-900/50 flex justify-around items-center border-t border-slate-200 dark:border-slate-700">
@@ -224,14 +228,22 @@ export default function Index({ inventarisGrouped, auth }) {
 
                 if (searchQuery) {
                     const searchMatch = (
-                        (String(item.nomor || '')).toLowerCase().includes(lowercasedQuery) ||
-                        (item.nama_barang || '').toLowerCase().includes(lowercasedQuery) ||
-                        (item.kode_barang || '').toLowerCase().includes(lowercasedQuery) ||
-                        (item.tempat_pemakaian || '').toLowerCase().includes(lowercasedQuery) ||
-                        (item.spesifikasi || '').toLowerCase().includes(lowercasedQuery)
+                        String(item.display_nomor_barang || '')
+                            .toLowerCase()
+                            .includes(lowercasedQuery) ||
+
+                        (item.display_nama_barang || '')
+                            .toLowerCase()
+                            .includes(lowercasedQuery) ||
+
+                        (item.display_kode_barang || '')
+                            .toLowerCase()
+                            .includes(lowercasedQuery)
                     );
+
                     if (!searchMatch) return false;
                 }
+
                 return true;
             });
             return { ...group, items: filteredItems };
@@ -246,9 +258,16 @@ export default function Index({ inventarisGrouped, auth }) {
             const key = sortConfig.key;
             let comparison = 0;
             if (key === 'nomor') {
-                const valA = String(a.items[0]?.nomor || '');
-                const valB = String(b.items[0]?.nomor || '');
-                comparison = valA.localeCompare(valB, undefined, { numeric: true });
+                const getNomor = (group) =>
+                    String(group.items?.[0]?.display_nomor_barang ?? '');
+            
+                const valA = getNomor(a);
+                const valB = getNomor(b);
+            
+                comparison = valA.localeCompare(valB, undefined, {
+                    numeric: true,
+                    sensitivity: 'base'
+                });
             } else {
                 let aValue, bValue;
                 switch (key) {
@@ -257,10 +276,15 @@ export default function Index({ inventarisGrouped, auth }) {
                         aValue = getLatestDate(a.items);
                         bValue = getLatestDate(b.items);
                         break;
-                    case 'tempat_pemakaian':
-                        aValue = (a.items[0]?.tempat_pemakaian || '').toLowerCase();
-                        bValue = (b.items[0]?.tempat_pemakaian || '').toLowerCase();
-                        break;
+                        case 'tempat_pemakaian': {
+                            const getRuangan = (group) =>
+                                (group.items?.[0]?.display_ruangan ?? '').toLowerCase();
+                        
+                            aValue = getRuangan(a);
+                            bValue = getRuangan(b);
+                            break;
+                        }
+                        
                     default:
                         aValue = (a.nama_barang || '').toLowerCase();
                         bValue = (b.nama_barang || '').toLowerCase();
@@ -734,9 +758,9 @@ export default function Index({ inventarisGrouped, auth }) {
                                                                         {openGroups[group.nama_barang] ? <ChevronDownIcon className="w-5 h-5 mr-2" /> : <ChevronRightIcon className="w-5 h-5 mr-2" />}
                                                                         <span>
                                                                             {(group.nama_barang || '').toUpperCase()}
-                                                                            {group.items?.[0]?.nomor && (
+                                                                            {group.items?.[0]?.display_nomor_barang && (
                                                                                 <span className="ml-2 font-normal text-slate-600 dark:text-slate-400 text-sm">
-                                                                                    / No. Barang: {group.items[0].nomor}
+                                                                                    / No. Barang: {group.items[0].display_nomor_barang}
                                                                                 </span>
                                                                             )}
                                                                         </span>
@@ -767,14 +791,14 @@ export default function Index({ inventarisGrouped, auth }) {
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                                                                     <Link href={route('inventaris.show', item.id)} className="group">
                                                                         <p className="text-slate-900 dark:text-white font-semibold group-hover:text-green-600 dark:group-hover:text-green-500 transition-colors">
-                                                                            {item.nama_barang.toUpperCase()}
+                                                                            {item.display_nama_barang.toUpperCase()}
                                                                         </p>
                                                                     </Link>
-                                                                    <p className="text-slate-500 dark:text-slate-400">No: {item.nomor}</p>
-                                                                    <p className="text-slate-500 dark:text-slate-400 text-xs">Kode: {item.kode_barang.toUpperCase()}</p>
+                                                                    <p className="text-slate-500 dark:text-slate-400">No: {item.display_nomor_barang}</p>
+                                                                    <p className="text-slate-500 dark:text-slate-400 text-xs">Kode: {(item.master_barang?.kategori?.nama ?? "").toUpperCase()}</p>
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">
-                                                                    {(item.spesifikasi || '-').toUpperCase()}
+                                                                    {(item.spesifikasi ?? "").toUpperCase()}
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">
                                                                     <p>Total: {item.jumlah}</p>
@@ -782,15 +806,17 @@ export default function Index({ inventarisGrouped, auth }) {
                                                                     <p className="text-xs">Rusak: {item.jumlah_rusak}</p>
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">
-                                                                    <p>{item.tempat_pemakaian.toUpperCase()}</p>
-                                                                    <p className="text-xs">Ruang: {item.nomor_ruang}</p>
+                                                                    <p>{item.display_ruangan.toUpperCase()}</p>
+                                                                    <p className="text-xs">Ruang: {item.display_nomor_ruang}</p>
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">
                                                                     <p>{formatDate(item.tanggal_masuk)}</p>
-                                                                    <p className="text-xs text-slate-500 dark:text-slate-400">Asal: {(item.asal_perolehan || '-').toUpperCase()}</p>
+                                                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                                        Asal: {item.display_asal?.toUpperCase() || '-'}
+                                                                    </p>
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-300">
-                                                                    {item.nama_pengunggah || '-'}
+                                                                    {item.user?.name ?? 'N/A'}
                                                                 </td>
                                                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm text-right text-slate-800 dark:text-slate-300">
                                                                     {formatCurrency(item.harga)}

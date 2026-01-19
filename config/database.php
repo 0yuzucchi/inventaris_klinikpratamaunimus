@@ -95,6 +95,10 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            'prepared' => false, // TAMBAHKAN BARIS INI
+            'options' => array_filter([
+                PDO::ATTR_EMULATE_PREPARES => true, // <--- TAMBAHKAN BARIS INI
+            ]),
         ],
 
         'sqlsrv' => [

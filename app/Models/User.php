@@ -12,6 +12,14 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
+    // --- DEFINISI ROLE AGAR KONSISTEN ---
+    const ROLE_SUPER_ADMIN = 'super_admin'; // Bisa akses Web Profile & Inventaris
+    const ROLE_HUMAS = 'humas';             // Web Profile
+    const ROLE_KEPALA_RT = 'kepala_rt';     // Web Inventaris
+    const ROLE_STAFF_RT = 'staff_rt';       // Web Inventaris
+    const ROLE_DIREKTUR = 'direktur';       // Web Inventaris
+    const ROLE_KEUANGAN = 'keuangan';       // Web Inventaris
+
     /**
      * The attributes that are mass assignable.
      *
@@ -21,6 +29,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role', // <--- TAMBAHKAN INI
     ];
 
     /**
@@ -44,5 +53,11 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+    
+    // Helper untuk cek role (Opsional, tapi sangat membantu di controller/blade)
+    public function hasRole($role)
+    {
+        return $this->role === $role;
     }
 }
